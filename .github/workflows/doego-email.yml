@@ -46,7 +46,15 @@ jobs:
           OUTPUT_DIR: outputs
           ENABLE_PDF_FALLBACK: "false"
         run: |
-          python -m src.main
+          for i in 1 2 3; do
+            python -m src.main && break
+            if [ "$i" -eq 3 ]; then
+              echo "Monitor falhou apos 3 tentativas."
+              exit 1
+            fi
+            echo "Tentativa $i falhou, aguardando 30s para retry..."
+            sleep 30
+          done
 
       - name: Generate demo email artifact
         run: |
