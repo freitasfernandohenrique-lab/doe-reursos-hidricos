@@ -69,6 +69,10 @@ def _subject(today: datetime) -> str:
     return f"[DOE-GO] Monitoramento Saneamento — {today.strftime('%d/%m/%Y')}"
 
 
+def _self_test_subject(now: datetime) -> str:
+    return f"[DOE-GO][SELF-TEST] Monitoramento Saneamento — {now.strftime('%d/%m/%Y %H:%M:%S')}"
+
+
 def _email_targets(raw: str) -> list[str]:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
@@ -125,7 +129,75 @@ def _demo_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], str]:
     return report, run_meta, html
 
 
-def run(demo: bool = False, send_email: bool = True) -> int:
+def _self_test_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], str]:
+    mock_item = {
+        "unique_id": "self-test-1",
+        "date_iso": today_iso,
+        "edition_id": 99999,
+        "edition_numero": 99999,
+        "suplemento": 0,
+        "keyword": "self-test, saneago, pregão",
+        "keyword_group": "self-test,licitacao,saneago",
+        "context": "SELF-TEST: ocorrência simulada para validar pipeline completo de análise e envio de e-mail.",
+        "score": 9,
+        "theme": "licitacoes_contratos",
+        "orgao": "SELF-TEST",
+        "link": "https://diariooficial.abc.go.gov.br/",
+        "source_type": "simulated",
+    }
+    typed = [MatchItem(**mock_item)]
+    report = analyze(typed, today_iso=today_iso)
+    run_meta = {
+        "editions_analyzed": 1,
+        "pages_analyzed": 1,
+        "duration_seconds": 1,
+        "warnings": ["Execução de self-test (dados simulados, sem chamada ao DOE)"],
+    }
+    html = build_email_html(report, run_meta)
+    return report, run_meta, html
+
+
+def _send_if_configured(today: datetime, html_body: str, send_email: bool, subject: str) -> int:
+    if not send_email:
+        print("Execução sem envio de e-mail (--no-send).")
+        return 0
+
+    email_from = os.getenv("EMAIL_FROM", "")
+    email_to_raw = os.getenv("EMAIL_TO", "")
+    smtp_host = os.getenv("SMTP_HOST", "")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+
+    required = [email_from, email_to_raw, smtp_host, smtp_user, smtp_pass]
+    if not all(required):
+        print("Credenciais SMTP/EMAIL ausentes. Arquivos gerados sem envio.")
+        return 0
+
+    recipients = _email_targets(email_to_raw)
+    if not recipients:
+        print("EMAIL_TO vazio após parsing.")
+        return 0
+
+    try:
+        send_email_smtp(
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_user=smtp_user,
+            smtp_pass=smtp_pass,
+            email_from=email_from,
+            email_to=recipients,
+            subject=subject,
+            html_body=html_body,
+        )
+        print(f"E-mail enviado com sucesso para {len(recipients)} destinatário(s).")
+        return 0
+    except Exception as exc:
+        print(f"Falha no envio SMTP: {exc}", file=sys.stderr)
+        return 3
+
+
+def run(demo: bool = False, self_test: bool = False, send_email: bool = True) -> int:
     started = time.time()
     today = _today_sp()
     today_iso = today.date().isoformat()
@@ -139,6 +211,20 @@ def run(demo: bool = False, send_email: bool = True) -> int:
         (out_dir / "sample_email.html").write_text(html_body, encoding="utf-8")
         print("Modo demo finalizado. Arquivos gerados em outputs/.")
         return 0
+
+    if self_test:
+        report, run_meta, html_body = _self_test_report(today_iso)
+        _save_json(out_dir / "report_self_test.json", report)
+        (out_dir / "self_test_email.html").write_text(html_body, encoding="utf-8")
+        code = _send_if_configured(
+            today=today,
+            html_body=html_body,
+            send_email=send_email,
+            subject=_self_test_subject(today),
+        )
+        if code == 0:
+            print("Self-test finalizado.")
+        return code
 
     sent_log = _load_sent_log(state_file)
     if sent_log.get(today_iso, {}).get("sent"):
@@ -189,38 +275,11 @@ def run(demo: bool = False, send_email: bool = True) -> int:
     html_body = build_email_html(report, run_meta)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")
 
-    if not send_email:
-        print("Execução sem envio de e-mail (--no-send).")
-        return 0
+    code = _send_if_configured(today=today, html_body=html_body, send_email=send_email, subject=_subject(today))
+    if code != 0:
+        return code
 
-    email_from = os.getenv("EMAIL_FROM", "")
-    email_to_raw = os.getenv("EMAIL_TO", "")
-    smtp_host = os.getenv("SMTP_HOST", "")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_pass = os.getenv("SMTP_PASS", "")
-
-    required = [email_from, email_to_raw, smtp_host, smtp_user, smtp_pass]
-    if not all(required):
-        print("Credenciais SMTP/EMAIL ausentes. Arquivos gerados sem envio.")
-        return 0
-
-    recipients = _email_targets(email_to_raw)
-    if not recipients:
-        print("EMAIL_TO vazio após parsing.")
-        return 0
-
-    try:
-        send_email_smtp(
-            smtp_host=smtp_host,
-            smtp_port=smtp_port,
-            smtp_user=smtp_user,
-            smtp_pass=smtp_pass,
-            email_from=email_from,
-            email_to=recipients,
-            subject=_subject(today),
-            html_body=html_body,
-        )
+    if send_email:
         sent_log[today_iso] = {
             "sent": True,
             "sent_at": _today_sp().isoformat(),
@@ -228,21 +287,25 @@ def run(demo: bool = False, send_email: bool = True) -> int:
             "editions_analyzed": len(editions),
         }
         _save_sent_log(state_file, sent_log)
-        print(f"E-mail enviado com sucesso para {len(recipients)} destinatário(s).")
-        return 0
-    except Exception as exc:
-        print(f"Falha no envio SMTP: {exc}", file=sys.stderr)
-        return 3
+    return 0
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Monitor DOE-GO saneamento")
     parser.add_argument("--demo", action="store_true", help="Gera e-mail de exemplo com dados simulados")
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Gera e-mail de teste com 1 ocorrência simulada (sem chamar DOE).",
+    )
     parser.add_argument("--no-send", action="store_true", help="Processa dados sem enviar e-mail")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.demo and args.self_test:
+        parser.error("Use apenas um modo especial por vez: --demo ou --self-test.")
+    return args
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    code = run(demo=args.demo, send_email=not args.no_send)
+    code = run(demo=args.demo, self_test=args.self_test, send_email=not args.no_send)
     raise SystemExit(code)

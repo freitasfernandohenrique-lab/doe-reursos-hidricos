@@ -58,6 +58,18 @@ python -m src.main
 python -m src.main --demo
 ```
 
+5. Rodar self-test ponta-a-ponta com 1 ocorrência fake (sem chamar DOE):
+
+```bash
+python -m src.main --self-test
+```
+
+Para validar sem enviar e-mail:
+
+```bash
+python -m src.main --self-test --no-send
+```
+
 Arquivos gerados em `outputs/`:
 
 - `report.json`
@@ -65,6 +77,7 @@ Arquivos gerados em `outputs/`:
 - `matches_10d.csv`
 - `email.html`
 - `sample_email.html` (modo demo)
+- `self_test_email.html` (modo self-test)
 
 ## Configuração de secrets no GitHub
 
