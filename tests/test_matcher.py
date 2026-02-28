@@ -14,23 +14,25 @@ def _edition():
 
 def test_find_matches_detects_keywords_with_accents():
     text = (
-        "A SANEAGO publicou licitação para estação de tratamento de água e esgoto. "
-        "Também houve outorga para captação de água."
+        "A SANEAGO reforçou ações de saneamento e recursos hídricos. "
+        "Também houve medidas para água e esgoto."
     )
     matches = find_matches(_edition(), text, source_type="pdf")
     assert matches
     groups = ",".join(m.keyword_group for m in matches)
     assert "saneago" in groups
-    assert "licitacao" in groups
-    assert "outorga" in groups or "captacao" in groups
+    assert "saneamento" in groups
+    assert "recursos hidricos" in groups
+    assert "agua" in groups
+    assert "esgoto" in groups
 
 
 def test_dedupe_keeps_highest_score_per_context():
     text = (
-        "Pregão da SANEAGO com valor de R$ 100.000,00 para contrato de manutenção. "
-        "Pregão da SANEAGO com valor de R$ 100.000,00 para contrato de manutenção."
+        "SANEAGO e saneamento com valor de R$ 100.000,00 para ampliar rede de água e esgoto. "
+        "SANEAGO e saneamento com valor de R$ 100.000,00 para ampliar rede de água e esgoto."
     )
     matches = find_matches(_edition(), text, source_type="pdf")
     assert len(matches) == 1
     score = matches[0].score
-    assert score >= compute_score({"licitacao", "saneago", "contrato"}, matches[0].context)
+    assert score >= compute_score({"saneago", "saneamento", "agua", "esgoto"}, matches[0].context)

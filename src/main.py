@@ -238,7 +238,7 @@ def run(
     if force_send:
         print("FORCE_SEND ativo: ignorando bloqueio de idempotência.")
 
-    start_date = today.date() - timedelta(days=29)
+    start_date = today.date()
     end_date = today.date()
 
     warnings: list[str] = []
@@ -277,7 +277,7 @@ def run(
 
     _save_json(out_dir / "report.json", report_full)
     _save_csv(out_dir / "matches_today.csv", today_items)
-    _save_csv(out_dir / "matches_30d.csv", [m.to_dict() for m in matches])
+    _save_csv(out_dir / "matches_1d.csv", [m.to_dict() for m in matches])
 
     html_body = build_email_html(report, run_meta)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")

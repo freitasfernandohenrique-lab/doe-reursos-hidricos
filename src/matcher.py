@@ -11,28 +11,16 @@ from typing import Any
 
 
 KEYWORD_ALIASES = {
-    "saneamento": ["saneamento"],
     "saneago": ["saneago"],
     "recursos hidricos": ["recursos hídricos", "recursos hidricos"],
+    "saneamento": ["saneamento"],
     "agua": ["água", "agua"],
     "esgoto": ["esgoto"],
-    "drenagem": ["drenagem"],
-    "residuos": ["resíduos", "residuos"],
-    "estacao de tratamento": ["estação de tratamento", "estacao de tratamento"],
-    "eta": ["eta"],
-    "ete": ["ete"],
-    "outorga": ["outorga"],
-    "captacao": ["captação", "captacao", "captação de água", "captacao de agua"],
-    "tarifa": ["tarifa"],
-    "contrato": ["contrato", "aditivo"],
-    "licitacao": ["licitação", "licitacao", "concorrência", "concorrencia", "pregão", "pregao", "dispensa", "inexigibilidade"],
 }
 
 THEME_RULES = {
-    "licitacoes_contratos": ["licitacao", "contrato"],
-    "outorgas_recursos_hidricos": ["outorga", "captacao", "recursos hidricos", "agua"],
-    "obras_servicos": ["saneamento", "esgoto", "drenagem", "estacao de tratamento", "eta", "ete", "residuos"],
-    "regulacao_tarifas": ["tarifa", "saneago"],
+    "saneago": ["saneago"],
+    "saneamento_recursos_hidricos": ["saneamento", "recursos hidricos", "agua", "esgoto"],
     "comunicados": [],
 }
 
@@ -128,15 +116,15 @@ def infer_orgao(context: str) -> str:
 
 def compute_score(keyword_groups: set[str], context: str) -> int:
     score = 0
-    if "licitacao" in keyword_groups:
-        score += 3
     if "saneago" in keyword_groups:
         score += 2
-    if any(k in keyword_groups for k in ("outorga", "captacao", "recursos hidricos")):
+    if "recursos hidricos" in keyword_groups:
         score += 2
-    if MONEY_OR_DEADLINE_RE.search(context):
+    if "saneamento" in keyword_groups:
+        score += 2
+    if any(k in keyword_groups for k in ("agua", "esgoto")):
         score += 1
-    if "contrato" in keyword_groups:
+    if MONEY_OR_DEADLINE_RE.search(context):
         score += 1
     return score
 
