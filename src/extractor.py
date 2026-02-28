@@ -108,6 +108,24 @@ def _try_html(session: requests.Session, url: str) -> tuple[str, list[str]]:
     return "", warnings
 
 
+def _try_view_html_diario(session: requests.Session, edition_id: int) -> tuple[str, str, list[str]]:
+    warnings: list[str] = []
+    url = f"https://diariooficial.abc.go.gov.br/portal/visualizacoes/view_html_diario/{edition_id}"
+    try:
+        resp = session.get(url, timeout=getattr(session, "request_timeout", 45))
+        if not resp.ok:
+            warnings.append(f"view_html_diario indisponível: status={resp.status_code}")
+            return "", url, warnings
+        text = _extract_html_text(resp.text)
+        if len(text) > 3000:
+            return text, url, warnings
+        warnings.append("view_html_diario com pouco conteúdo")
+        return "", url, warnings
+    except Exception as exc:
+        warnings.append(f"Falha na coleta view_html_diario: {exc}")
+        return "", url, warnings
+
+
 def extract_text_for_edition(
     edition: dict[str, Any],
     prefer_html: bool = True,
@@ -119,6 +137,19 @@ def extract_text_for_edition(
     html_url = edition.get("html_url")
     jornal_url = edition.get("jornal_url")
     pdf_url = edition.get("pdf_url")
+    edition_id = int(edition.get("id") or 0)
+
+    if edition_id > 0:
+        text, view_url, warns = _try_view_html_diario(session, edition_id)
+        warnings.extend(warns)
+        if text:
+            return ExtractionResult(
+                text=text,
+                source_type="view_html_diario",
+                source_url=view_url,
+                pages=None,
+                warnings=warnings,
+            )
 
     if prefer_html and html_url:
         text, warns = _try_html(session, html_url)
