@@ -52,6 +52,12 @@ set SMTP_PASS=senha
 python -m src.main
 ```
 
+Para forçar reenvio no mesmo dia (ignorando idempotência):
+
+```bash
+python -m src.main --force-send
+```
+
 4. Gerar e-mail de exemplo com dados simulados (sem chamar DOE):
 
 ```bash
@@ -105,6 +111,8 @@ Arquivo: `.github/workflows/doego-email.yml`
   - gerar demo `python -m src.main --demo`
   - upload artifacts (`outputs/`, `.state/sent_log.json`)
   - save cache do sent log
+
+No `Run workflow` manual, você pode marcar `force_send=true` para reenviar no mesmo dia.
 
 ## Idempotência
 

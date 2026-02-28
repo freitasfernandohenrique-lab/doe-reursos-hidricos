@@ -197,7 +197,12 @@ def _send_if_configured(today: datetime, html_body: str, send_email: bool, subje
         return 3
 
 
-def run(demo: bool = False, self_test: bool = False, send_email: bool = True) -> int:
+def run(
+    demo: bool = False,
+    self_test: bool = False,
+    send_email: bool = True,
+    force_send: bool = False,
+) -> int:
     started = time.time()
     today = _today_sp()
     today_iso = today.date().isoformat()
@@ -227,9 +232,11 @@ def run(demo: bool = False, self_test: bool = False, send_email: bool = True) ->
         return code
 
     sent_log = _load_sent_log(state_file)
-    if sent_log.get(today_iso, {}).get("sent"):
+    if not force_send and sent_log.get(today_iso, {}).get("sent"):
         print(f"E-mail já enviado em {today_iso}. Encerrando de forma idempotente.")
         return 0
+    if force_send:
+        print("FORCE_SEND ativo: ignorando bloqueio de idempotência.")
 
     start_date = today.date() - timedelta(days=29)
     end_date = today.date()
@@ -299,6 +306,7 @@ def _parse_args() -> argparse.Namespace:
         help="Gera e-mail de teste com 1 ocorrência simulada (sem chamar DOE).",
     )
     parser.add_argument("--no-send", action="store_true", help="Processa dados sem enviar e-mail")
+    parser.add_argument("--force-send", action="store_true", help="Ignora bloqueio idempotente e força envio.")
     args = parser.parse_args()
     if args.demo and args.self_test:
         parser.error("Use apenas um modo especial por vez: --demo ou --self-test.")
@@ -307,5 +315,11 @@ def _parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = _parse_args()
-    code = run(demo=args.demo, self_test=args.self_test, send_email=not args.no_send)
+    env_force_send = _env_bool("FORCE_SEND", default=False)
+    code = run(
+        demo=args.demo,
+        self_test=args.self_test,
+        send_email=not args.no_send,
+        force_send=args.force_send or env_force_send,
+    )
     raise SystemExit(code)
