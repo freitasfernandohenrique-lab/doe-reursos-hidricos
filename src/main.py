@@ -231,7 +231,7 @@ def run(demo: bool = False, self_test: bool = False, send_email: bool = True) ->
         print(f"E-mail já enviado em {today_iso}. Encerrando de forma idempotente.")
         return 0
 
-    start_date = today.date() - timedelta(days=9)
+    start_date = today.date() - timedelta(days=29)
     end_date = today.date()
 
     warnings: list[str] = []
@@ -270,7 +270,7 @@ def run(demo: bool = False, self_test: bool = False, send_email: bool = True) ->
 
     _save_json(out_dir / "report.json", report_full)
     _save_csv(out_dir / "matches_today.csv", today_items)
-    _save_csv(out_dir / "matches_10d.csv", [m.to_dict() for m in matches])
+    _save_csv(out_dir / "matches_30d.csv", [m.to_dict() for m in matches])
 
     html_body = build_email_html(report, run_meta)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")
