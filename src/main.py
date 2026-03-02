@@ -252,9 +252,11 @@ def run(
     pages_analyzed = 0
     allow_pdf_fallback = _env_bool("ENABLE_PDF_FALLBACK", default=False)
     for edition in editions:
+        # Para obter número de página, é necessário extrair por PDF (texto por página).
+        prefer_html = not allow_pdf_fallback
         extracted = extract_text_for_edition(
             edition.to_dict(),
-            prefer_html=True,
+            prefer_html=prefer_html,
             allow_pdf_fallback=allow_pdf_fallback,
         )
         pages_analyzed += int(extracted.pages or 0)
