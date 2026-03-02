@@ -19,7 +19,6 @@ class ExtractionResult:
     source_type: str
     source_url: str
     pages: int | None
-    page_texts: list[str] | None
     warnings: list[str]
 
 
@@ -47,7 +46,7 @@ def _clean_text(text: str) -> str:
     return text.strip()
 
 
-def _extract_pdf_bytes(content: bytes) -> tuple[str, int | None, list[str], list[str] | None]:
+def _extract_pdf_bytes(content: bytes) -> tuple[str, int | None, list[str]]:
     warnings: list[str] = []
     try:
         import pdfplumber  # type: ignore
@@ -68,7 +67,7 @@ def _extract_pdf_bytes(content: bytes) -> tuple[str, int | None, list[str], list
                 parts = [_clean_text(p.extract_text() or "") for p in pdf.pages]
                 text = _clean_text("\n".join(parts))
                 if text:
-                    return text, pages, warnings, parts
+                    return text, pages, warnings
                 warnings.append("pdfplumber retornou texto vazio")
         except Exception as exc:
             warnings.append(f"pdfplumber falhou: {exc}")
@@ -78,11 +77,11 @@ def _extract_pdf_bytes(content: bytes) -> tuple[str, int | None, list[str], list
             reader = PdfReader(io.BytesIO(content))
             parts = [_clean_text(p.extract_text() or "") for p in reader.pages]
             text = _clean_text("\n".join(parts))
-            return text, len(reader.pages), warnings, parts
+            return text, len(reader.pages), warnings
         except Exception as exc:
             warnings.append(f"pypdf falhou: {exc}")
 
-    return "", None, warnings, None
+    return "", None, warnings
 
 
 def _extract_html_text(content: str) -> str:
@@ -149,7 +148,6 @@ def extract_text_for_edition(
                 source_type="view_html_diario",
                 source_url=view_url,
                 pages=None,
-                page_texts=None,
                 warnings=warnings,
             )
 
@@ -162,7 +160,6 @@ def extract_text_for_edition(
                 source_type="html",
                 source_url=html_url,
                 pages=None,
-                page_texts=None,
                 warnings=warnings,
             )
 
@@ -175,7 +172,6 @@ def extract_text_for_edition(
                 source_type="jornal",
                 source_url=jornal_url,
                 pages=None,
-                page_texts=None,
                 warnings=warnings,
             )
 
@@ -186,7 +182,6 @@ def extract_text_for_edition(
             source_type="none",
             source_url=html_url or jornal_url or "",
             pages=None,
-            page_texts=None,
             warnings=warnings,
         )
 
@@ -196,21 +191,19 @@ def extract_text_for_edition(
             source_type="none",
             source_url="",
             pages=None,
-            page_texts=None,
             warnings=warnings + ["Sem URL de PDF"],
         )
 
     try:
         resp = session.get(pdf_url, timeout=getattr(session, "request_timeout", 45))
         resp.raise_for_status()
-        text, pages, pdf_warnings, page_texts = _extract_pdf_bytes(resp.content)
+        text, pages, pdf_warnings = _extract_pdf_bytes(resp.content)
         warnings.extend(pdf_warnings)
         return ExtractionResult(
             text=text,
             source_type="pdf",
             source_url=pdf_url,
             pages=pages,
-            page_texts=page_texts,
             warnings=warnings,
         )
     except Exception as exc:
@@ -220,6 +213,5 @@ def extract_text_for_edition(
             source_type="pdf",
             source_url=pdf_url,
             pages=None,
-            page_texts=None,
             warnings=warnings,
         )

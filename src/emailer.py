@@ -26,9 +26,7 @@ def _safe(v: Any) -> str:
 def _list_links(items: list[dict[str, Any]], limit: int) -> str:
     rows = []
     for item in items[:limit]:
-        page_value = item.get("page")
-        page_label = f"página {page_value}" if page_value else "página n/d"
-        reason = f"score {item['score']} | tema: {item['theme']} | {page_label}"
+        reason = f"score {item['score']} | tema: {item['theme']}"
         rows.append(
             f"<li><a href='{_safe(item['link'])}'>{_safe(item['keyword'])}</a> - {_safe(reason)} - {_safe(item['orgao'])}</li>"
         )
@@ -45,14 +43,13 @@ def _table_today(items: list[dict[str, Any]]) -> str:
             f"<td>{_safe(item['orgao'])}</td>"
             f"<td>{_safe(item['theme'])}</td>"
             f"<td>{_safe(item['keyword'])}</td>"
-            f"<td>{_safe(item.get('page') or 'n/d')}</td>"
             f"<td>{_safe(item['context'])}</td>"
             f"<td><a href='{_safe(item['link'])}'>link</a></td>"
             "</tr>"
         )
     return (
         "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
-        "<thead><tr><th>Órgão</th><th>Tema</th><th>Palavra-chave</th><th>Página</th><th>Trecho</th><th>Link</th></tr></thead>"
+        "<thead><tr><th>Órgão</th><th>Tema</th><th>Palavra-chave</th><th>Trecho</th><th>Link</th></tr></thead>"
         f"<tbody>{''.join(trs)}</tbody></table>"
     )
 

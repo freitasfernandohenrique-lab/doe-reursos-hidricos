@@ -53,7 +53,6 @@ class MatchItem:
     orgao: str
     link: str
     source_type: str
-    page: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -135,34 +134,11 @@ def _uid(link: str, context: str, keyword_group: str) -> str:
     return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
 
-def _infer_page_from_context(context: str, normalized_pages: list[str]) -> int | None:
-    if not normalized_pages:
-        return None
-    snippet = _normalize(re.sub(r"\s+", " ", context)).strip()
-    if not snippet:
-        return None
-
-    for size in (160, 110, 70):
-        piece = snippet[:size].strip()
-        if not piece:
-            continue
-        for page_num, page_text in enumerate(normalized_pages, start=1):
-            if piece in page_text:
-                return page_num
-    return None
-
-
-def find_matches(
-    edition: dict[str, Any],
-    text: str,
-    source_type: str,
-    page_texts: list[str] | None = None,
-) -> list[MatchItem]:
+def find_matches(edition: dict[str, Any], text: str, source_type: str) -> list[MatchItem]:
     if not text:
         return []
 
     normalized = _normalize(text)
-    normalized_pages = [_normalize(p) for p in (page_texts or [])]
     by_context: dict[int, dict[str, Any]] = defaultdict(dict)
 
     for group, alias, pattern in PATTERNS:
@@ -191,7 +167,6 @@ def find_matches(
         orgao = infer_orgao(context)
         score = compute_score(groups, context)
         link = edition.get("pdf_url") or edition.get("html_url") or ""
-        page = _infer_page_from_context(context, normalized_pages)
         unique_id = _uid(link, context, theme)
         if unique_id in seen:
             continue
@@ -211,7 +186,6 @@ def find_matches(
                 orgao=orgao,
                 link=link,
                 source_type=source_type,
-                page=page,
             )
         )
 
