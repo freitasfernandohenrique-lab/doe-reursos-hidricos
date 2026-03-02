@@ -1,5 +1,7 @@
 ﻿requests==2.32.3
 beautifulsoup4==4.12.3
+pypdf==5.2.0
+pdfplumber==0.11.5
 python-dateutil==2.9.0.post0
 tzdata==2025.2
 pytest==8.3.4
