@@ -26,7 +26,9 @@ def _safe(v: Any) -> str:
 def _list_links(items: list[dict[str, Any]], limit: int) -> str:
     rows = []
     for item in items[:limit]:
-        reason = f"score {item['score']} | tema: {item['theme']}"
+        page_value = item.get("page")
+        page_label = f"página {page_value}" if page_value else "página n/d"
+        reason = f"score {item['score']} | tema: {item['theme']} | {page_label}"
         rows.append(
             f"<li><a href='{_safe(item['link'])}'>{_safe(item['keyword'])}</a> - {_safe(reason)} - {_safe(item['orgao'])}</li>"
         )
@@ -43,13 +45,14 @@ def _table_today(items: list[dict[str, Any]]) -> str:
             f"<td>{_safe(item['orgao'])}</td>"
             f"<td>{_safe(item['theme'])}</td>"
             f"<td>{_safe(item['keyword'])}</td>"
+            f"<td>{_safe(item.get('page') or 'n/d')}</td>"
             f"<td>{_safe(item['context'])}</td>"
             f"<td><a href='{_safe(item['link'])}'>link</a></td>"
             "</tr>"
         )
     return (
         "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
-        "<thead><tr><th>Órgão</th><th>Tema</th><th>Palavra-chave</th><th>Trecho</th><th>Link</th></tr></thead>"
+        "<thead><tr><th>Órgão</th><th>Tema</th><th>Palavra-chave</th><th>Página</th><th>Trecho</th><th>Link</th></tr></thead>"
         f"<tbody>{''.join(trs)}</tbody></table>"
     )
 
@@ -57,14 +60,7 @@ def _table_today(items: list[dict[str, Any]]) -> str:
 def build_email_html(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
     now_sp = datetime.now(_tz_sp()).strftime("%d/%m/%Y %H:%M:%S %Z")
     top_day = report.get("top_day", [])
-    top_today = report.get("top_today", [])
     today_items = report.get("today_items", [])
-    keywords = report.get("keywords_today", {})
-    themes = report.get("themes_today", {})
-    counts = report.get("counts", {})
-
-    kw_rows = "".join(f"<li>{_safe(k)}: {_safe(v)}</li>" for k, v in keywords.items())
-    th_rows = "".join(f"<li>{_safe(k)}: {_safe(v)}</li>" for k, v in themes.items())
 
     if not today_items:
         day_msg = "<p>Sem ocorrências nas palavras-chave. A coleta foi executada com sucesso.</p>"
@@ -83,22 +79,6 @@ def build_email_html(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
 
       <h3>2) Achados do dia (detalhado)</h3>
       {_table_today(today_items)}
-
-      <h3>3) Consolidação do dia atual</h3>
-      <p><b>Total de itens (hoje):</b> {_safe(counts.get('items_today', 0))}<br/>
-         <b>Novos:</b> {_safe(counts.get('new_items', 0))} | <b>Recorrentes:</b> {_safe(counts.get('recurring_items', 0))}</p>
-      <p><b>Contagem por palavra-chave</b></p><ul>{kw_rows or '<li>Sem dados</li>'}</ul>
-      <p><b>Contagem por tema</b></p><ul>{th_rows or '<li>Sem dados</li>'}</ul>
-      <p><b>Top 10 itens relevantes</b></p>
-      {_list_links(top_today, limit=10)}
-
-      <h3>4) Rodapé técnico</h3>
-      <p>
-        Edições analisadas: {_safe(run_meta.get('editions_analyzed', 0))}<br/>
-        Páginas analisadas (aprox.): {_safe(run_meta.get('pages_analyzed', 0))}<br/>
-        Duração: {_safe(run_meta.get('duration_seconds', 0))} s<br/>
-        Erros/alertas: {_safe('; '.join(run_meta.get('warnings', [])) or 'Nenhum')}
-      </p>
     </body></html>
     """
     return html_body

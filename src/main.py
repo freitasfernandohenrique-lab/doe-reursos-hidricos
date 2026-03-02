@@ -259,7 +259,12 @@ def run(
         )
         pages_analyzed += int(extracted.pages or 0)
         warnings.extend(extracted.warnings)
-        found = find_matches(edition.to_dict(), extracted.text, source_type=extracted.source_type)
+        found = find_matches(
+            edition.to_dict(),
+            extracted.text,
+            source_type=extracted.source_type,
+            page_texts=extracted.page_texts,
+        )
         matches.extend(found)
 
     report = analyze(matches, today_iso=today_iso)
