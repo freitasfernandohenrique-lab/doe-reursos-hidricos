@@ -3,7 +3,7 @@
 Robô em Python para monitorar o Diário Oficial do Estado de Goiás (DOE-GO), identificar publicações relacionadas a saneamento e enviar e-mail diário com:
 
 - análise do dia (edição mais recente/data corrente)
-- análise consolidada do dia atual (janela de 1 dia)
+- análise consolidada do dia atual
 
 A coleta usa a fonte oficial `https://diariooficial.abc.go.gov.br/` e endpoints públicos descobertos na própria página:
 
@@ -80,7 +80,6 @@ Arquivos gerados em `outputs/`:
 
 - `report.json`
 - `matches_today.csv`
-- `matches_1d.csv`
 - `email.html`
 - `sample_email.html` (modo demo)
 - `self_test_email.html` (modo self-test)

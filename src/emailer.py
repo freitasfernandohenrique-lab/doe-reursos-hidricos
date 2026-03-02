@@ -57,10 +57,10 @@ def _table_today(items: list[dict[str, Any]]) -> str:
 def build_email_html(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
     now_sp = datetime.now(_tz_sp()).strftime("%d/%m/%Y %H:%M:%S %Z")
     top_day = report.get("top_day", [])
-    top_1d = report.get("top_1d", [])
+    top_today = report.get("top_today", [])
     today_items = report.get("today_items", [])
-    keywords = report.get("keywords_1d", {})
-    themes = report.get("themes_1d", {})
+    keywords = report.get("keywords_today", {})
+    themes = report.get("themes_today", {})
     counts = report.get("counts", {})
 
     kw_rows = "".join(f"<li>{_safe(k)}: {_safe(v)}</li>" for k, v in keywords.items())
@@ -84,13 +84,13 @@ def build_email_html(report: dict[str, Any], run_meta: dict[str, Any]) -> str:
       <h3>2) Achados do dia (detalhado)</h3>
       {_table_today(today_items)}
 
-      <h3>3) Janela de 1 dia</h3>
-      <p><b>Total de itens (1d):</b> {_safe(counts.get('items_1d', 0))}<br/>
+      <h3>3) Consolidação do dia atual</h3>
+      <p><b>Total de itens (hoje):</b> {_safe(counts.get('items_today', 0))}<br/>
          <b>Novos:</b> {_safe(counts.get('new_items', 0))} | <b>Recorrentes:</b> {_safe(counts.get('recurring_items', 0))}</p>
       <p><b>Contagem por palavra-chave</b></p><ul>{kw_rows or '<li>Sem dados</li>'}</ul>
       <p><b>Contagem por tema</b></p><ul>{th_rows or '<li>Sem dados</li>'}</ul>
       <p><b>Top 10 itens relevantes</b></p>
-      {_list_links(top_1d, limit=10)}
+      {_list_links(top_today, limit=10)}
 
       <h3>4) Rodapé técnico</h3>
       <p>

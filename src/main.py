@@ -277,7 +277,6 @@ def run(
 
     _save_json(out_dir / "report.json", report_full)
     _save_csv(out_dir / "matches_today.csv", today_items)
-    _save_csv(out_dir / "matches_1d.csv", [m.to_dict() for m in matches])
 
     html_body = build_email_html(report, run_meta)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")
