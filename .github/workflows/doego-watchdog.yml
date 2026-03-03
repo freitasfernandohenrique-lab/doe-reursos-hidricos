@@ -1,0 +1,67 @@
+name: DOE-GO Schedule Watchdog
+
+on:
+  schedule:
+    - cron: "40 12 * * *" # 09:40 America/Sao_Paulo
+  workflow_dispatch:
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Check today runs and trigger fallback if needed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const workflowId = 'doego-email.yml';
+            const tz = 'America/Sao_Paulo';
+
+            const fmtDate = new Intl.DateTimeFormat('en-CA', {
+              timeZone: tz,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            });
+            const fmtHour = new Intl.DateTimeFormat('en-GB', {
+              timeZone: tz,
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+            });
+
+            const now = new Date();
+            const today = fmtDate.format(now);
+            const nowHm = fmtHour.format(now);
+            core.info(`Watchdog date/time in ${tz}: ${today} ${nowHm}`);
+
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id: workflowId,
+              per_page: 100,
+            });
+
+            const todayRuns = runs.filter((run) => fmtDate.format(new Date(run.created_at)) === today);
+            const hasSuccess = todayRuns.some((run) => run.conclusion === 'success');
+            const hasRunning = todayRuns.some((run) => run.status === 'queued' || run.status === 'in_progress');
+
+            core.info(`Today runs: ${todayRuns.length} | hasSuccess=${hasSuccess} | hasRunning=${hasRunning}`);
+
+            if (hasSuccess || hasRunning) {
+              core.info('No fallback needed.');
+              return;
+            }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: workflowId,
+              ref: 'main',
+            });
+            core.notice('Fallback dispatch triggered for doego-email.yml');
