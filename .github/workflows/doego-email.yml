@@ -1,8 +1,9 @@
-﻿name: DOE-GO Email Monitor
+name: DOE-GO Email Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "30 11 * * *" # 08:30 America/Sao_Paulo (aprox.)
+    - cron: "43 12 * * *" # teste pontual agendado para 03/03/2026 09:43 BRT
   workflow_dispatch:
     inputs:
       force_send:
