@@ -2,7 +2,8 @@ name: DOE-GO Email Monitor
 
 on:
   schedule:
-    - cron: "30 11 * * *" # 08:30 America/Sao_Paulo (aprox.)
+    - cron: "30 11 * * *" # 08:30 America/Sao_Paulo (principal)
+    - cron: "55 11 * * *" # 08:55 America/Sao_Paulo (backup)
   workflow_dispatch:
 
 jobs:
