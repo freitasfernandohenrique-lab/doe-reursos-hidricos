@@ -11,14 +11,26 @@ from typing import Any
 
 
 KEYWORD_ALIASES = {
+    "convocacao": ["convocação", "convocacao", "convoca"],
+    "assembleia": ["assembleia", "assembleias"],
+    "microrregiao": ["microrregião", "microrregiao", "microrregional", "colegiado microrregional", "mrsb"],
     "saneago": ["saneago"],
     "recursos hidricos": ["recursos hídricos", "recursos hidricos"],
-    "saneamento": ["saneamento"],
+    "saneamento": ["saneamento", "abastecimento de água", "abastecimento de agua", "esgotamento sanitário", "esgotamento sanitario"],
     "agua": ["água", "agua"],
     "esgoto": ["esgoto"],
+    "governanca hidrica": ["segurança hídrica", "seguranca hidrica", "gestão de águas", "gestao de aguas", "bacia hidrográfica", "bacia hidrografica", "comitê de bacia", "comite de bacia", "manancial", "outorga de uso"],
 }
 
 THEME_RULES = {
+    "microregioes_recursos_hidricos": [
+        "convocacao",
+        "assembleia",
+        "microrregiao",
+        "saneamento",
+        "recursos hidricos",
+        "governanca hidrica",
+    ],
     "saneago": ["saneago"],
     "saneamento_recursos_hidricos": ["saneamento", "recursos hidricos", "agua", "esgoto"],
     "comunicados": [],
@@ -37,6 +49,21 @@ MONEY_OR_DEADLINE_RE = re.compile(
     re.IGNORECASE,
 )
 
+EXCLUDED_LOW_COMPLEXITY_PATTERNS = [
+    re.compile(
+        r"\b(licitacao|pregao|dispensa de licitacao|concorrencia publica|credenciamento|termo de referencia)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(material de expediente|material de consumo|aquisicao de materiais|fornecimento de materiais)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(servicos de limpeza|servico de vigilancia|locacao de veiculos|manutencao predial|servico de copa|servicos graficos|passagens aereas|agenciamento de viagens)\b",
+        re.IGNORECASE,
+    ),
+]
+
 
 @dataclass(slots=True)
 class MatchItem:
@@ -53,6 +80,8 @@ class MatchItem:
     orgao: str
     link: str
     source_type: str
+    axis_analysis: str
+    correlated_not_prioritized: str
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -134,6 +163,38 @@ def _uid(link: str, context: str, keyword_group: str) -> str:
     return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
 
+def _is_axis_target(groups: set[str], context: str) -> bool:
+    has_convocation = "convocacao" in groups
+    has_assembly = "assembleia" in groups
+    has_micro = "microrregiao" in groups
+    has_hydric_axis = any(g in groups for g in ("saneamento", "recursos hidricos", "governanca hidrica"))
+    has_excluded = any(pattern.search(context) for pattern in EXCLUDED_LOW_COMPLEXITY_PATTERNS)
+    return has_convocation and has_assembly and has_micro and has_hydric_axis and not has_excluded
+
+
+def _build_axis_analysis(groups: set[str]) -> str:
+    signs: list[str] = []
+    if "microrregiao" in groups:
+        signs.append("microregiao")
+    if "saneamento" in groups:
+        signs.append("saneamento/MRSB")
+    if "recursos hidricos" in groups or "governanca hidrica" in groups:
+        signs.append("recursos hidricos")
+    if not signs:
+        signs.append("governanca regional")
+    return "Trecho aderente ao eixo por tratar de convocacao de assembleia com foco em " + ", ".join(signs) + "."
+
+
+def _build_correlated_not_prioritized(context: str) -> str:
+    if EXCLUDED_LOW_COMPLEXITY_PATTERNS[0].search(context):
+        return "Tema correlato identificado (licitacao/contratacao), mas nao priorizado por fugir do eixo estrategico."
+    if EXCLUDED_LOW_COMPLEXITY_PATTERNS[1].search(context):
+        return "Tema correlato identificado (compras de materiais), mas nao priorizado por fugir do eixo estrategico."
+    if EXCLUDED_LOW_COMPLEXITY_PATTERNS[2].search(context):
+        return "Tema correlato identificado (servicos operacionais simples), mas nao priorizado por fugir do eixo estrategico."
+    return "Tema correlato nao priorizado: atos administrativos de baixa complexidade sem impacto direto em governanca hidrica."
+
+
 def find_matches(edition: dict[str, Any], text: str, source_type: str) -> list[MatchItem]:
     if not text:
         return []
@@ -167,6 +228,8 @@ def find_matches(edition: dict[str, Any], text: str, source_type: str) -> list[M
         orgao = infer_orgao(context)
         score = compute_score(groups, context)
         link = edition.get("pdf_url") or edition.get("html_url") or ""
+        if not _is_axis_target(groups, context):
+            continue
         unique_id = _uid(link, context, theme)
         if unique_id in seen:
             continue
@@ -186,6 +249,8 @@ def find_matches(edition: dict[str, Any], text: str, source_type: str) -> list[M
                 orgao=orgao,
                 link=link,
                 source_type=source_type,
+                axis_analysis=_build_axis_analysis(groups),
+                correlated_not_prioritized=_build_correlated_not_prioritized(context),
             )
         )
 

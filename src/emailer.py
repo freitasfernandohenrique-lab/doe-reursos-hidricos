@@ -44,12 +44,14 @@ def _table_today(items: list[dict[str, Any]]) -> str:
             f"<td>{_safe(item['theme'])}</td>"
             f"<td>{_safe(item['keyword'])}</td>"
             f"<td>{_safe(item['context'])}</td>"
+            f"<td>{_safe(item.get('axis_analysis', ''))}</td>"
+            f"<td>{_safe(item.get('correlated_not_prioritized', ''))}</td>"
             f"<td><a href='{_safe(item['link'])}'>link</a></td>"
             "</tr>"
         )
     return (
         "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
-        "<thead><tr><th>Órgão</th><th>Tema</th><th>Palavra-chave</th><th>Trecho</th><th>Link</th></tr></thead>"
+        "<thead><tr><th>Órgão</th><th>Tema</th><th>Palavra-chave</th><th>Trecho</th><th>Análise do eixo</th><th>Tema correlato não priorizado</th><th>Link</th></tr></thead>"
         f"<tbody>{''.join(trs)}</tbody></table>"
     )
 
