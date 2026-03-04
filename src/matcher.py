@@ -80,8 +80,8 @@ class MatchItem:
     orgao: str
     link: str
     source_type: str
-    axis_analysis: str
-    correlated_not_prioritized: str
+    axis_analysis: str = ""
+    correlated_not_prioritized: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
