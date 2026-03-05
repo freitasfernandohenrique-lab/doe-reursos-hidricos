@@ -1,4 +1,4 @@
-﻿from src.matcher import compute_score, find_matches
+﻿from src.matcher import compute_score, find_matches, find_secondary_municipal_alerts
 
 
 def _edition():
@@ -48,3 +48,13 @@ def test_excludes_low_complexity_procurement_topics():
     )
     matches = find_matches(_edition(), text, source_type="pdf")
     assert not matches
+
+
+def test_secondary_municipal_alert_captures_smae_without_axis_terms():
+    text = (
+        "A Superintendencia Municipal de Agua e Esgoto de Catalao informa manutencao programada "
+        "na rede de abastecimento."
+    )
+    alerts = find_secondary_municipal_alerts(_edition(), text, source_type="html")
+    assert alerts
+    assert "superintendencia municipal de agua e esgoto" in alerts[0].keyword

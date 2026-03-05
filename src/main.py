@@ -18,7 +18,7 @@ from src.analyzer import analyze
 from src.emailer import build_email_html, send_email_smtp
 from src.extractor import extract_text_for_edition
 from src.fetcher import discover_editions
-from src.matcher import MatchItem, find_matches
+from src.matcher import MatchItem, SecondaryAlertItem, find_matches, find_secondary_municipal_alerts
 
 
 def _tz_sp() -> timezone | ZoneInfo:
@@ -249,6 +249,7 @@ def run(
         return 2
 
     matches: list[MatchItem] = []
+    secondary_alerts: list[SecondaryAlertItem] = []
     pages_analyzed = 0
     allow_pdf_fallback = _env_bool("ENABLE_PDF_FALLBACK", default=False)
     for edition in editions:
@@ -261,6 +262,12 @@ def run(
         warnings.extend(extracted.warnings)
         found = find_matches(edition.to_dict(), extracted.text, source_type=extracted.source_type)
         matches.extend(found)
+        secondary_found = find_secondary_municipal_alerts(
+            edition.to_dict(),
+            extracted.text,
+            source_type=extracted.source_type,
+        )
+        secondary_alerts.extend(secondary_found)
 
     report = analyze(matches, today_iso=today_iso)
 
@@ -270,15 +277,22 @@ def run(
         "pages_analyzed": pages_analyzed,
         "duration_seconds": duration,
         "warnings": sorted(set(warnings))[:30],
+        "secondary_alerts_count": len(secondary_alerts),
     }
 
-    report_full = {"report": report, "run_meta": run_meta, "editions": [e.to_dict() for e in editions]}
+    secondary_today = [item.to_dict() for item in secondary_alerts if item.date_iso == today_iso]
+    report_full = {
+        "report": report,
+        "run_meta": run_meta,
+        "editions": [e.to_dict() for e in editions],
+        "secondary_alerts_today": secondary_today,
+    }
     today_items = report.get("today_items", [])
 
     _save_json(out_dir / "report.json", report_full)
     _save_csv(out_dir / "matches_today.csv", today_items)
 
-    html_body = build_email_html(report, run_meta)
+    html_body = build_email_html(report, run_meta, secondary_alerts_today)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")
 
     code = _send_if_configured(today=today, html_body=html_body, send_email=send_email, subject=_subject(today))

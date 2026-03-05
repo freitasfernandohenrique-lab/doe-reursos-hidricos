@@ -87,6 +87,23 @@ class MatchItem:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class SecondaryAlertItem:
+    unique_id: str
+    date_iso: str
+    edition_id: int
+    edition_numero: int | None
+    orgao: str
+    keyword: str
+    context: str
+    reason: str
+    link: str
+    source_type: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def _normalize(value: str) -> str:
     no_accents = "".join(
         c for c in unicodedata.normalize("NFD", value) if unicodedata.category(c) != "Mn"
@@ -193,6 +210,86 @@ def _build_correlated_not_prioritized(context: str) -> str:
     if EXCLUDED_LOW_COMPLEXITY_PATTERNS[2].search(context):
         return "Tema correlato identificado (servicos operacionais simples), mas nao priorizado por fugir do eixo estrategico."
     return "Tema correlato nao priorizado: atos administrativos de baixa complexidade sem impacto direto em governanca hidrica."
+
+
+SECONDARY_MUNICIPAL_PATTERNS = [
+    ("smae", re.compile(r"(?<!\w)smae(?!\w)", re.IGNORECASE)),
+    (
+        "superintendencia municipal de agua e esgoto",
+        re.compile(
+            r"superintendencia\s+municipal\s+de\s+agua\s+e\s+esgoto",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "servico autonomo de agua e esgoto",
+        re.compile(
+            r"servico\s+autonomo\s+de\s+agua\s+e\s+esgoto",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "departamento municipal de agua e esgoto",
+        re.compile(
+            r"departamento\s+municipal\s+de\s+agua\s+e\s+esgoto",
+            re.IGNORECASE,
+        ),
+    ),
+]
+
+
+def find_secondary_municipal_alerts(
+    edition: dict[str, Any],
+    text: str,
+    source_type: str,
+) -> list[SecondaryAlertItem]:
+    if not text:
+        return []
+
+    normalized = _normalize(text)
+    items: list[SecondaryAlertItem] = []
+    seen: set[str] = set()
+
+    for label, pattern in SECONDARY_MUNICIPAL_PATTERNS:
+        for match in pattern.finditer(normalized):
+            start, end = match.span()
+            context = _extract_context(text, start, end)
+            context_norm = _normalize(context)
+
+            # Não duplicar itens já cobertos pelo eixo principal.
+            if all(term in context_norm for term in ("convoc", "assembleia", "microrregiao")):
+                continue
+
+            if not any(term in context_norm for term in ("agua", "esgoto", "saneamento")):
+                continue
+
+            link = edition.get("pdf_url") or edition.get("html_url") or ""
+            unique_id = _uid(link, context, f"secondary:{label}")
+            if unique_id in seen:
+                continue
+            seen.add(unique_id)
+
+            items.append(
+                SecondaryAlertItem(
+                    unique_id=unique_id,
+                    date_iso=edition["date_iso"],
+                    edition_id=int(edition["id"]),
+                    edition_numero=edition.get("numero"),
+                    orgao=infer_orgao(context),
+                    keyword=label,
+                    context=context,
+                    reason="Tema municipal correlato de agua/esgoto fora do critério estrito do eixo principal.",
+                    link=link,
+                    source_type=source_type,
+                )
+            )
+
+    dedup: dict[str, SecondaryAlertItem] = {}
+    for item in items:
+        k = f"{item.link}|{_normalize(item.context[:160])}"
+        if k not in dedup:
+            dedup[k] = item
+    return list(dedup.values())
 
 
 def find_matches(edition: dict[str, Any], text: str, source_type: str) -> list[MatchItem]:
