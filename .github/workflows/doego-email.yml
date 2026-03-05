@@ -5,6 +5,12 @@ on:
     - cron: "30 11 * * *" # 08:30 America/Sao_Paulo (principal)
     - cron: "55 11 * * *" # 08:55 America/Sao_Paulo (backup)
   workflow_dispatch:
+    inputs:
+      force_send:
+        description: "Ignorar idempotencia e enviar mesmo se ja houve envio hoje"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   monitor:
@@ -46,7 +52,7 @@ jobs:
           SENT_LOG_PATH: .state/sent_log.json
           OUTPUT_DIR: outputs
           ENABLE_PDF_FALLBACK: "false"
-          FORCE_SEND: "false"
+          FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' && inputs.force_send || 'false' }}
         run: |
           for i in 1 2 3; do
             python -m src.main && break
