@@ -51,7 +51,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SENT_LOG_PATH: .state/sent_log.json
           OUTPUT_DIR: outputs
-          ENABLE_PDF_FALLBACK: "false"
+          ENABLE_PDF_FALLBACK: "true"
           FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' && inputs.force_send || 'false' }}
         run: |
           for i in 1 2 3; do
