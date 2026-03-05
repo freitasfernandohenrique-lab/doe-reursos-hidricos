@@ -269,6 +269,29 @@ def run(
         )
         secondary_alerts.extend(secondary_found)
 
+        # Se HTML/Jornal nao trouxe achados, tenta PDF para cobrir textos nao renderizados no HTML.
+        if (
+            allow_pdf_fallback
+            and extracted.source_type in {"view_html_diario", "html", "jornal"}
+            and not found
+            and not secondary_found
+        ):
+            extracted_pdf = extract_text_for_edition(
+                edition.to_dict(),
+                prefer_html=False,
+                allow_pdf_fallback=True,
+            )
+            pages_analyzed += int(extracted_pdf.pages or 0)
+            warnings.extend(extracted_pdf.warnings)
+            found_pdf = find_matches(edition.to_dict(), extracted_pdf.text, source_type=extracted_pdf.source_type)
+            matches.extend(found_pdf)
+            secondary_pdf = find_secondary_municipal_alerts(
+                edition.to_dict(),
+                extracted_pdf.text,
+                source_type=extracted_pdf.source_type,
+            )
+            secondary_alerts.extend(secondary_pdf)
+
     report = analyze(matches, today_iso=today_iso)
 
     duration = round(time.time() - started, 2)
