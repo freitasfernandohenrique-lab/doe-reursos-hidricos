@@ -139,7 +139,7 @@ def extract_text_for_edition(
     pdf_url = edition.get("pdf_url")
     edition_id = int(edition.get("id") or 0)
 
-    if edition_id > 0:
+    if prefer_html and edition_id > 0:
         text, view_url, warns = _try_view_html_diario(session, edition_id)
         warnings.extend(warns)
         if text:
@@ -163,7 +163,7 @@ def extract_text_for_edition(
                 warnings=warnings,
             )
 
-    if jornal_url:
+    if prefer_html and jornal_url:
         text, warns = _try_html(session, jornal_url)
         warnings.extend(warns)
         if text:
