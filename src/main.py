@@ -292,7 +292,7 @@ def run(
     _save_json(out_dir / "report.json", report_full)
     _save_csv(out_dir / "matches_today.csv", today_items)
 
-    html_body = build_email_html(report, run_meta, secondary_alerts_today)
+    html_body = build_email_html(report, run_meta, secondary_today)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")
 
     code = _send_if_configured(today=today, html_body=html_body, send_email=send_email, subject=_subject(today))
