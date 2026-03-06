@@ -84,6 +84,53 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _build_recent_7d_items(
+    matches: list[MatchItem],
+    secondary_alerts: list[SecondaryAlertItem],
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+
+    for item in matches:
+        items.append(
+            {
+                "date_iso": item.date_iso,
+                "edition_id": item.edition_id,
+                "edition_numero": item.edition_numero,
+                "category": "eixo principal",
+                "orgao": item.orgao,
+                "keyword": item.keyword,
+                "reason": item.axis_analysis,
+                "context": item.context,
+                "link": item.link,
+            }
+        )
+
+    for item in secondary_alerts:
+        items.append(
+            {
+                "date_iso": item.date_iso,
+                "edition_id": item.edition_id,
+                "edition_numero": item.edition_numero,
+                "category": "correlato",
+                "orgao": item.orgao,
+                "keyword": item.keyword,
+                "reason": item.reason,
+                "context": item.context,
+                "link": item.link,
+            }
+        )
+
+    items.sort(
+        key=lambda x: (
+            x["date_iso"],
+            x.get("edition_numero") or 0,
+            1 if x["category"] == "eixo principal" else 0,
+        ),
+        reverse=True,
+    )
+    return items
+
+
 def _demo_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], str]:
     mock_items = [
         {
@@ -121,11 +168,30 @@ def _demo_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], str]:
     report = analyze(typed, today_iso=today_iso)
     run_meta = {
         "editions_analyzed": 2,
+        "editions_today": 2,
         "pages_analyzed": 120,
         "duration_seconds": 1,
         "warnings": ["Dados simulados para demonstração"],
+        "scan_window_days": 7,
+        "recent_items_count": len(mock_items),
+        "recent_primary_count": len(mock_items),
+        "recent_secondary_count": 0,
     }
-    html = build_email_html(report, run_meta)
+    recent_items_7d = [
+        {
+            "date_iso": today_iso,
+            "edition_id": item["edition_id"],
+            "edition_numero": item["edition_numero"],
+            "category": "eixo principal",
+            "orgao": item["orgao"],
+            "keyword": item["keyword"],
+            "reason": "Ocorrência simulada do eixo principal.",
+            "context": item["context"],
+            "link": item["link"],
+        }
+        for item in mock_items
+    ]
+    html = build_email_html(report, run_meta, recent_items_7d=recent_items_7d)
     return report, run_meta, html
 
 
@@ -149,11 +215,29 @@ def _self_test_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], s
     report = analyze(typed, today_iso=today_iso)
     run_meta = {
         "editions_analyzed": 1,
+        "editions_today": 1,
         "pages_analyzed": 1,
         "duration_seconds": 1,
         "warnings": ["Execução de self-test (dados simulados, sem chamada ao DOE)"],
+        "scan_window_days": 7,
+        "recent_items_count": 1,
+        "recent_primary_count": 1,
+        "recent_secondary_count": 0,
     }
-    html = build_email_html(report, run_meta)
+    recent_items_7d = [
+        {
+            "date_iso": today_iso,
+            "edition_id": mock_item["edition_id"],
+            "edition_numero": mock_item["edition_numero"],
+            "category": "eixo principal",
+            "orgao": mock_item["orgao"],
+            "keyword": mock_item["keyword"],
+            "reason": "Ocorrência simulada para validação do pipeline.",
+            "context": mock_item["context"],
+            "link": mock_item["link"],
+        }
+    ]
+    html = build_email_html(report, run_meta, recent_items_7d=recent_items_7d)
     return report, run_meta, html
 
 
@@ -238,7 +322,7 @@ def run(
     if force_send:
         print("FORCE_SEND ativo: ignorando bloqueio de idempotência.")
 
-    start_date = today.date()
+    start_date = today.date() - timedelta(days=6)
     end_date = today.date()
 
     warnings: list[str] = []
@@ -293,14 +377,21 @@ def run(
             secondary_alerts.extend(secondary_pdf)
 
     report = analyze(matches, today_iso=today_iso)
+    recent_items_7d = _build_recent_7d_items(matches, secondary_alerts)
+    editions_today = sum(1 for edition in editions if edition.date_iso == today_iso)
 
     duration = round(time.time() - started, 2)
     run_meta = {
         "editions_analyzed": len(editions),
+        "editions_today": editions_today,
         "pages_analyzed": pages_analyzed,
         "duration_seconds": duration,
         "warnings": sorted(set(warnings))[:30],
         "secondary_alerts_count": len(secondary_alerts),
+        "scan_window_days": 7,
+        "recent_items_count": len(recent_items_7d),
+        "recent_primary_count": sum(1 for item in recent_items_7d if item["category"] == "eixo principal"),
+        "recent_secondary_count": sum(1 for item in recent_items_7d if item["category"] == "correlato"),
     }
 
     secondary_today = [item.to_dict() for item in secondary_alerts if item.date_iso == today_iso]
@@ -309,13 +400,14 @@ def run(
         "run_meta": run_meta,
         "editions": [e.to_dict() for e in editions],
         "secondary_alerts_today": secondary_today,
+        "recent_items_7d": recent_items_7d,
     }
     today_items = report.get("today_items", [])
 
     _save_json(out_dir / "report.json", report_full)
     _save_csv(out_dir / "matches_today.csv", today_items)
 
-    html_body = build_email_html(report, run_meta, secondary_today)
+    html_body = build_email_html(report, run_meta, secondary_today, recent_items_7d)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")
 
     code = _send_if_configured(today=today, html_body=html_body, send_email=send_email, subject=_subject(today))

@@ -77,15 +77,43 @@ def _table_secondary_alerts(items: list[dict[str, Any]]) -> str:
     )
 
 
+def _table_recent_7d(items: list[dict[str, Any]]) -> str:
+    if not items:
+        return "<p>Sem ocorrências relevantes nos últimos 7 dias.</p>"
+    trs = []
+    for item in items:
+        trs.append(
+            "<tr>"
+            f"<td>{_safe(item.get('date_iso', ''))}</td>"
+            f"<td>{_safe(item.get('edition_numero', ''))}</td>"
+            f"<td>{_safe(item.get('category', ''))}</td>"
+            f"<td>{_safe(item.get('orgao', ''))}</td>"
+            f"<td>{_safe(item.get('keyword', ''))}</td>"
+            f"<td>{_safe(item.get('reason', ''))}</td>"
+            f"<td>{_safe(item.get('context', ''))}</td>"
+            f"<td><a href='{_safe(item.get('link', ''))}'>link</a></td>"
+            "</tr>"
+        )
+    return (
+        "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
+        "<thead><tr><th>Data</th><th>Edição</th><th>Categoria</th><th>Órgão</th><th>Marcador</th><th>Motivo</th><th>Trecho</th><th>Link</th></tr></thead>"
+        f"<tbody>{''.join(trs)}</tbody></table>"
+    )
+
+
 def build_email_html(
     report: dict[str, Any],
     run_meta: dict[str, Any],
     secondary_alerts_today: list[dict[str, Any]] | None = None,
+    recent_items_7d: list[dict[str, Any]] | None = None,
 ) -> str:
     now_sp = datetime.now(_tz_sp()).strftime("%d/%m/%Y %H:%M:%S %Z")
     top_day = report.get("top_day", [])
     today_items = report.get("today_items", [])
     secondary_items = secondary_alerts_today or []
+    recent_items = recent_items_7d or []
+    warnings = run_meta.get("warnings", [])
+    warnings_html = "<br/>".join(_safe(w) for w in warnings[:5]) if warnings else "Sem alertas técnicos."
 
     if not today_items:
         day_msg = "<p>Sem ocorrências nas palavras-chave. A coleta foi executada com sucesso.</p>"
@@ -96,7 +124,12 @@ def build_email_html(
     <html><body style='font-family:Arial,sans-serif'>
       <h2>[DOE-GO] Monitoramento Saneamento</h2>
       <p><b>Execução:</b> {_safe(now_sp)}<br/>
-      <b>Fonte oficial:</b> <a href='https://diariooficial.abc.go.gov.br/'>DOE-GO</a></p>
+      <b>Fonte oficial:</b> <a href='https://diariooficial.abc.go.gov.br/'>DOE-GO</a><br/>
+      <b>Janela analisada:</b> últimos {_safe(run_meta.get('scan_window_days', 1))} dias<br/>
+      <b>Edições analisadas na janela:</b> {_safe(run_meta.get('editions_analyzed', 0))}<br/>
+      <b>Edições de hoje:</b> {_safe(run_meta.get('editions_today', 0))}<br/>
+      <b>Páginas analisadas:</b> {_safe(run_meta.get('pages_analyzed', 0))}<br/>
+      <b>Alertas técnicos:</b> {warnings_html}</p>
 
       <h3>1) Resumo do dia</h3>
       {day_msg}
@@ -107,6 +140,12 @@ def build_email_html(
 
       <h3>3) Alertas secundários municipais (fora do eixo principal)</h3>
       {_table_secondary_alerts(secondary_items)}
+
+      <h3>4) Relatório dos últimos 7 dias</h3>
+      <p><b>Ocorrências relevantes:</b> {_safe(run_meta.get('recent_items_count', 0))}<br/>
+      <b>No eixo principal:</b> {_safe(run_meta.get('recent_primary_count', 0))}<br/>
+      <b>Correlatas fora do eixo principal:</b> {_safe(run_meta.get('recent_secondary_count', 0))}</p>
+      {_table_recent_7d(recent_items)}
     </body></html>
     """
     return html_body
