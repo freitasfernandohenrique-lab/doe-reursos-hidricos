@@ -5,6 +5,7 @@ on:
     - cron: "45 11 * * *" # 08:45 America/Sao_Paulo (fallback cedo)
     - cron: "10 12 * * *" # 09:10 America/Sao_Paulo (fallback intermediario)
     - cron: "40 12 * * *" # 09:40 America/Sao_Paulo (fallback final)
+    - cron: "30 15 * * *" # 12:30 America/Sao_Paulo (fallback tardio)
   workflow_dispatch:
 
 jobs:
