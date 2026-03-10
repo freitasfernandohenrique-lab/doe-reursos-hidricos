@@ -1,4 +1,4 @@
-﻿"""Composição e envio de e-mail HTML."""
+"""Composição e envio de e-mail HTML."""
 
 from __future__ import annotations
 
@@ -12,6 +12,12 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
+AXIS_ORDER = [
+    "microrregioes_saneamento_basico",
+    "recursos_hidricos_geral",
+]
+
+
 def _tz_sp() -> timezone | ZoneInfo:
     try:
         return ZoneInfo("America/Sao_Paulo")
@@ -23,42 +29,53 @@ def _safe(v: Any) -> str:
     return html.escape(str(v or ""), quote=True)
 
 
-def _list_links(items: list[dict[str, Any]], limit: int) -> str:
+def _axis_label(axis: str, report: dict[str, Any]) -> str:
+    return report.get("sections", {}).get(axis, {}).get("label", axis)
+
+
+def _list_axis_items(items: list[dict[str, Any]], limit: int) -> str:
     rows = []
     for item in items[:limit]:
-        reason = f"score {item['score']} | tema: {item['theme']}"
+        reason = item.get("axis_analysis") or f"score {item.get('score', 0)} | tema: {item.get('theme', '')}"
         rows.append(
-            f"<li><a href='{_safe(item['link'])}'>{_safe(item['keyword'])}</a> - {_safe(reason)} - {_safe(item['orgao'])}</li>"
+            f"<li><a href='{_safe(item.get('link', ''))}'>{_safe(item.get('keyword', ''))}</a> - {_safe(reason)} - {_safe(item.get('orgao', ''))}</li>"
         )
     return "<ul>" + "".join(rows) + "</ul>" if rows else "<p>Sem destaques.</p>"
 
 
-def _table_today(items: list[dict[str, Any]]) -> str:
+def _table_items(items: list[dict[str, Any]], include_axis: bool = False) -> str:
     if not items:
-        return "<p>Sem ocorrências nas palavras-chave.</p>"
+        return "<p>Sem ocorrências.</p>"
+
+    headers = ["Órgão", "Tema", "Palavra-chave", "Trecho", "Análise", "Link"]
+    if include_axis:
+        headers.insert(0, "Eixo")
+
     trs = []
     for item in items:
-        trs.append(
-            "<tr>"
-            f"<td>{_safe(item['orgao'])}</td>"
-            f"<td>{_safe(item['theme'])}</td>"
-            f"<td>{_safe(item['keyword'])}</td>"
-            f"<td>{_safe(item['context'])}</td>"
-            f"<td>{_safe(item.get('axis_analysis', ''))}</td>"
-            f"<td>{_safe(item.get('correlated_not_prioritized', ''))}</td>"
-            f"<td><a href='{_safe(item['link'])}'>link</a></td>"
-            "</tr>"
-        )
+        cells = [
+            f"<td>{_safe(item.get('orgao', ''))}</td>",
+            f"<td>{_safe(item.get('theme', ''))}</td>",
+            f"<td>{_safe(item.get('keyword', ''))}</td>",
+            f"<td>{_safe(item.get('context', ''))}</td>",
+            f"<td>{_safe(item.get('axis_analysis', ''))}</td>",
+            f"<td><a href='{_safe(item.get('link', ''))}'>link</a></td>",
+        ]
+        if include_axis:
+            cells.insert(0, f"<td>{_safe(item.get('monitor_axis_label', ''))}</td>")
+        trs.append("<tr>" + "".join(cells) + "</tr>")
+
+    header_html = "".join(f"<th>{_safe(header)}</th>" for header in headers)
     return (
         "<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%'>"
-        "<thead><tr><th>Órgão</th><th>Tema</th><th>Palavra-chave</th><th>Trecho</th><th>Análise do eixo</th><th>Tema correlato não priorizado</th><th>Link</th></tr></thead>"
+        f"<thead><tr>{header_html}</tr></thead>"
         f"<tbody>{''.join(trs)}</tbody></table>"
     )
 
 
 def _table_secondary_alerts(items: list[dict[str, Any]]) -> str:
     if not items:
-        return "<p>Sem alertas secundários municipais.</p>"
+        return "<p>Sem alertas correlatos.</p>"
     trs = []
     for item in items:
         trs.append(
@@ -77,9 +94,9 @@ def _table_secondary_alerts(items: list[dict[str, Any]]) -> str:
     )
 
 
-def _table_recent_7d(items: list[dict[str, Any]]) -> str:
+def _table_recent(items: list[dict[str, Any]]) -> str:
     if not items:
-        return "<p>Sem ocorrências relevantes nos últimos 7 dias.</p>"
+        return "<p>Sem ocorrências relevantes.</p>"
     trs = []
     for item in items:
         trs.append(
@@ -101,51 +118,75 @@ def _table_recent_7d(items: list[dict[str, Any]]) -> str:
     )
 
 
+def _decorate_axis_items(report: dict[str, Any], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    decorated: list[dict[str, Any]] = []
+    for item in items:
+        new_item = dict(item)
+        new_item["monitor_axis_label"] = _axis_label(item.get("monitor_axis", ""), report)
+        decorated.append(new_item)
+    return decorated
+
+
 def build_email_html(
     report: dict[str, Any],
     run_meta: dict[str, Any],
     secondary_alerts_today: list[dict[str, Any]] | None = None,
-    recent_items_7d: list[dict[str, Any]] | None = None,
+    recent_items_window: list[dict[str, Any]] | None = None,
 ) -> str:
     now_sp = datetime.now(_tz_sp()).strftime("%d/%m/%Y %H:%M:%S %Z")
-    top_day = report.get("top_day", [])
-    today_items = report.get("today_items", [])
-    secondary_items = secondary_alerts_today or []
-    recent_items = recent_items_7d or []
     warnings = run_meta.get("warnings", [])
     warnings_html = "<br/>".join(_safe(w) for w in warnings[:5]) if warnings else "Sem alertas técnicos."
+    today_items = _decorate_axis_items(report, report.get("today_items", []))
+    recent_items = recent_items_window or []
+    secondary_items = secondary_alerts_today or []
 
-    if not today_items:
-        day_msg = "<p>Sem ocorrências nas palavras-chave. A coleta foi executada com sucesso.</p>"
-    else:
-        day_msg = ""
+    sections_html = []
+    for axis in AXIS_ORDER:
+        axis_data = report.get("sections", {}).get(axis, {})
+        label = axis_data.get("label", axis)
+        today_data = axis_data.get("today", {})
+        window_data = axis_data.get("window", {})
+        today_top = _decorate_axis_items(report, today_data.get("top_items", []))
+        window_top = _decorate_axis_items(report, window_data.get("top_items", []))
+        sections_html.append(
+            f"""
+            <h3>{_safe(label)}</h3>
+            <p><b>Achados do dia:</b> {_safe(today_data.get('count', 0))}<br/>
+            <b>Ocorrências na janela:</b> {_safe(window_data.get('count', 0))}</p>
+            <p><b>Destaques do dia</b></p>
+            {_list_axis_items(today_top, limit=5)}
+            <p><b>Destaques dos últimos {_safe(run_meta.get('scan_window_days', 5))} dias</b></p>
+            {_list_axis_items(window_top, limit=8)}
+            """
+        )
 
     html_body = f"""
     <html><body style='font-family:Arial,sans-serif'>
-      <h2>[DOE-GO] Monitoramento Saneamento</h2>
+      <h2>[DOE-GO] Monitoramento Diário</h2>
       <p><b>Execução:</b> {_safe(now_sp)}<br/>
       <b>Fonte oficial:</b> <a href='https://diariooficial.abc.go.gov.br/'>DOE-GO</a><br/>
-      <b>Janela analisada:</b> últimos {_safe(run_meta.get('scan_window_days', 1))} dias<br/>
+      <b>Janela analisada:</b> últimos {_safe(run_meta.get('scan_window_days', 5))} dias<br/>
       <b>Edições analisadas na janela:</b> {_safe(run_meta.get('editions_analyzed', 0))}<br/>
-      <b>Edições de hoje:</b> {_safe(run_meta.get('editions_today', 0))}<br/>
+      <b>Edições do dia:</b> {_safe(run_meta.get('editions_today', 0))}<br/>
       <b>Páginas analisadas:</b> {_safe(run_meta.get('pages_analyzed', 0))}<br/>
       <b>Alertas técnicos:</b> {warnings_html}</p>
 
-      <h3>1) Resumo do dia</h3>
-      {day_msg}
-      {_list_links(top_day, limit=5)}
+      <h3>1) Análise específica do dia</h3>
+      <p><b>Total de ocorrências do dia:</b> {_safe(report.get('counts', {}).get('items_today', 0))}</p>
+      {''.join(sections_html)}
 
-      <h3>2) Achados do dia (detalhado)</h3>
-      {_table_today(today_items)}
+      <h3>2) Achados do dia em detalhe</h3>
+      {_table_items(today_items, include_axis=True)}
 
-      <h3>3) Alertas secundários municipais (fora do eixo principal)</h3>
+      <h3>3) Alertas correlatos municipais</h3>
       {_table_secondary_alerts(secondary_items)}
 
-      <h3>4) Relatório dos últimos 7 dias</h3>
+      <h3>4) Análise consolidada dos últimos {_safe(run_meta.get('scan_window_days', 5))} dias</h3>
       <p><b>Ocorrências relevantes:</b> {_safe(run_meta.get('recent_items_count', 0))}<br/>
-      <b>No eixo principal:</b> {_safe(run_meta.get('recent_primary_count', 0))}<br/>
-      <b>Correlatas fora do eixo principal:</b> {_safe(run_meta.get('recent_secondary_count', 0))}</p>
-      {_table_recent_7d(recent_items)}
+      <b>No eixo microrregiões:</b> {_safe(report.get('sections', {}).get('microrregioes_saneamento_basico', {}).get('window', {}).get('count', 0))}<br/>
+      <b>No eixo recursos hídricos geral:</b> {_safe(report.get('sections', {}).get('recursos_hidricos_geral', {}).get('window', {}).get('count', 0))}<br/>
+      <b>Alertas correlatos adicionais:</b> {_safe(run_meta.get('recent_secondary_count', 0))}</p>
+      {_table_recent(recent_items)}
     </body></html>
     """
     return html_body

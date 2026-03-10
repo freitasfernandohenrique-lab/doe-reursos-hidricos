@@ -84,7 +84,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _build_recent_7d_items(
+def _build_recent_window_items(
     matches: list[MatchItem],
     secondary_alerts: list[SecondaryAlertItem],
 ) -> list[dict[str, Any]]:
@@ -97,6 +97,7 @@ def _build_recent_7d_items(
                 "edition_id": item.edition_id,
                 "edition_numero": item.edition_numero,
                 "category": "eixo principal",
+                "monitor_axis": item.monitor_axis,
                 "orgao": item.orgao,
                 "keyword": item.keyword,
                 "reason": item.axis_analysis,
@@ -112,6 +113,7 @@ def _build_recent_7d_items(
                 "edition_id": item.edition_id,
                 "edition_numero": item.edition_numero,
                 "category": "correlato",
+                "monitor_axis": "recursos_hidricos_geral",
                 "orgao": item.orgao,
                 "keyword": item.keyword,
                 "reason": item.reason,
@@ -139,14 +141,17 @@ def _demo_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], str]:
             "edition_id": 7000,
             "edition_numero": 24700,
             "suplemento": 0,
-            "keyword": "pregão, saneago",
-            "keyword_group": "licitacao,saneago",
-            "context": "A SANEAGO torna público o pregão eletrônico para contratação de serviços de manutenção da ETA... valor estimado de R$ 1.200.000,00 e prazo de 12 meses.",
-            "score": 6,
-            "theme": "licitacoes_contratos",
+            "keyword": "convocação, assembleia, microrregião",
+            "keyword_group": "assembleia,convocacao,microrregiao,saneamento",
+            "context": "Convocação de assembleia do colegiado microrregional para deliberar sobre a governança da microrregião de saneamento básico.",
+            "score": 5,
+            "theme": "microregioes_recursos_hidricos",
             "orgao": "SANEAGO",
             "link": "https://diariooficial.abc.go.gov.br/portal/edicoes/download/7000",
             "source_type": "pdf",
+            "monitor_axis": "microrregioes_saneamento_basico",
+            "axis_analysis": "Trecho aderente ao eixo por tratar de convocacao de assembleia com foco em microregiao, saneamento/MRSB.",
+            "correlated_not_prioritized": "",
         },
         {
             "unique_id": "x2",
@@ -155,43 +160,47 @@ def _demo_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], str]:
             "edition_numero": 24701,
             "suplemento": 1,
             "keyword": "outorga, captação",
-            "keyword_group": "outorga,captacao,recursos hidricos",
+            "keyword_group": "agua,recursos hidricos",
             "context": "Publica-se pedido de outorga para captação de água superficial no município...",
             "score": 4,
             "theme": "outorgas_recursos_hidricos",
             "orgao": "SEMAD",
             "link": "https://diariooficial.abc.go.gov.br/portal/edicoes/download/7001",
             "source_type": "pdf",
+            "monitor_axis": "recursos_hidricos_geral",
+            "axis_analysis": "Trecho classificado no eixo amplo por envolver gestao/outorga/seguranca hidrica, agua.",
+            "correlated_not_prioritized": "",
         },
     ]
     typed = [MatchItem(**i) for i in mock_items]
-    report = analyze(typed, today_iso=today_iso)
+    report = analyze(typed, today_iso=today_iso, window_days=5)
     run_meta = {
         "editions_analyzed": 2,
         "editions_today": 2,
         "pages_analyzed": 120,
         "duration_seconds": 1,
         "warnings": ["Dados simulados para demonstração"],
-        "scan_window_days": 7,
+        "scan_window_days": 5,
         "recent_items_count": len(mock_items),
         "recent_primary_count": len(mock_items),
         "recent_secondary_count": 0,
     }
-    recent_items_7d = [
+    recent_items_5d = [
         {
             "date_iso": today_iso,
             "edition_id": item["edition_id"],
             "edition_numero": item["edition_numero"],
             "category": "eixo principal",
+            "monitor_axis": item["monitor_axis"],
             "orgao": item["orgao"],
             "keyword": item["keyword"],
-            "reason": "Ocorrência simulada do eixo principal.",
+            "reason": item["axis_analysis"],
             "context": item["context"],
             "link": item["link"],
         }
         for item in mock_items
     ]
-    html = build_email_html(report, run_meta, recent_items_7d=recent_items_7d)
+    html = build_email_html(report, run_meta, recent_items_window=recent_items_5d)
     return report, run_meta, html
 
 
@@ -206,38 +215,42 @@ def _self_test_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], s
         "keyword_group": "self-test,licitacao,saneago",
         "context": "SELF-TEST: ocorrência simulada para validar pipeline completo de análise e envio de e-mail.",
         "score": 9,
-        "theme": "licitacoes_contratos",
+        "theme": "microregioes_recursos_hidricos",
         "orgao": "SELF-TEST",
         "link": "https://diariooficial.abc.go.gov.br/",
         "source_type": "simulated",
+        "monitor_axis": "microrregioes_saneamento_basico",
+        "axis_analysis": "Trecho aderente ao eixo por tratar de convocacao de assembleia com foco em microregiao, saneamento/MRSB.",
+        "correlated_not_prioritized": "",
     }
     typed = [MatchItem(**mock_item)]
-    report = analyze(typed, today_iso=today_iso)
+    report = analyze(typed, today_iso=today_iso, window_days=5)
     run_meta = {
         "editions_analyzed": 1,
         "editions_today": 1,
         "pages_analyzed": 1,
         "duration_seconds": 1,
         "warnings": ["Execução de self-test (dados simulados, sem chamada ao DOE)"],
-        "scan_window_days": 7,
+        "scan_window_days": 5,
         "recent_items_count": 1,
         "recent_primary_count": 1,
         "recent_secondary_count": 0,
     }
-    recent_items_7d = [
+    recent_items_5d = [
         {
             "date_iso": today_iso,
             "edition_id": mock_item["edition_id"],
             "edition_numero": mock_item["edition_numero"],
             "category": "eixo principal",
+            "monitor_axis": "microrregioes_saneamento_basico",
             "orgao": mock_item["orgao"],
             "keyword": mock_item["keyword"],
-            "reason": "Ocorrência simulada para validação do pipeline.",
+            "reason": mock_item["axis_analysis"],
             "context": mock_item["context"],
             "link": mock_item["link"],
         }
     ]
-    html = build_email_html(report, run_meta, recent_items_7d=recent_items_7d)
+    html = build_email_html(report, run_meta, recent_items_window=recent_items_5d)
     return report, run_meta, html
 
 
@@ -322,7 +335,7 @@ def run(
     if force_send:
         print("FORCE_SEND ativo: ignorando bloqueio de idempotência.")
 
-    start_date = today.date() - timedelta(days=6)
+    start_date = today.date() - timedelta(days=4)
     end_date = today.date()
 
     warnings: list[str] = []
@@ -376,8 +389,8 @@ def run(
             )
             secondary_alerts.extend(secondary_pdf)
 
-    report = analyze(matches, today_iso=today_iso)
-    recent_items_7d = _build_recent_7d_items(matches, secondary_alerts)
+    report = analyze(matches, today_iso=today_iso, window_days=5)
+    recent_items_5d = _build_recent_window_items(matches, secondary_alerts)
     editions_today = sum(1 for edition in editions if edition.date_iso == today_iso)
 
     duration = round(time.time() - started, 2)
@@ -388,10 +401,10 @@ def run(
         "duration_seconds": duration,
         "warnings": sorted(set(warnings))[:30],
         "secondary_alerts_count": len(secondary_alerts),
-        "scan_window_days": 7,
-        "recent_items_count": len(recent_items_7d),
-        "recent_primary_count": sum(1 for item in recent_items_7d if item["category"] == "eixo principal"),
-        "recent_secondary_count": sum(1 for item in recent_items_7d if item["category"] == "correlato"),
+        "scan_window_days": 5,
+        "recent_items_count": len(recent_items_5d),
+        "recent_primary_count": sum(1 for item in recent_items_5d if item["category"] == "eixo principal"),
+        "recent_secondary_count": sum(1 for item in recent_items_5d if item["category"] == "correlato"),
     }
 
     secondary_today = [item.to_dict() for item in secondary_alerts if item.date_iso == today_iso]
@@ -400,14 +413,14 @@ def run(
         "run_meta": run_meta,
         "editions": [e.to_dict() for e in editions],
         "secondary_alerts_today": secondary_today,
-        "recent_items_7d": recent_items_7d,
+        "recent_items_5d": recent_items_5d,
     }
     today_items = report.get("today_items", [])
 
     _save_json(out_dir / "report.json", report_full)
     _save_csv(out_dir / "matches_today.csv", today_items)
 
-    html_body = build_email_html(report, run_meta, secondary_today, recent_items_7d)
+    html_body = build_email_html(report, run_meta, secondary_today, recent_items_5d)
     (out_dir / "email.html").write_text(html_body, encoding="utf-8")
 
     code = _send_if_configured(today=today, html_body=html_body, send_email=send_email, subject=_subject(today))

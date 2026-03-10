@@ -1,9 +1,12 @@
-﻿# Monitor DOE-GO - Saneamento
+# Monitor DOE-GO - Microrregiões e Recursos Hídricos
 
-Robô em Python para monitorar o Diário Oficial do Estado de Goiás (DOE-GO), identificar publicações relacionadas a saneamento e enviar e-mail diário com:
+Robô em Python para monitorar o Diário Oficial do Estado de Goiás (DOE-GO), identificar publicações relevantes e enviar um e-mail diário com:
 
-- análise do dia (edição mais recente/data corrente)
-- análise consolidada do dia atual
+- análise específica do dia
+- consolidação dos últimos 5 dias
+- separação por dois eixos:
+  - `microrregiões de saneamento básico`
+  - `recursos hídricos geral`
 
 A coleta usa a fonte oficial `https://diariooficial.abc.go.gov.br/` e endpoints públicos descobertos na própria página:
 
@@ -14,12 +17,13 @@ A coleta usa a fonte oficial `https://diariooficial.abc.go.gov.br/` e endpoints 
 
 - `src/fetcher.py`: descoberta de edições e links oficiais
 - `src/extractor.py`: extração de texto HTML/Jornal (PDF opcional)
-- `src/matcher.py`: keywords, contexto, dedupe, score
-- `src/analyzer.py`: métricas e tendências
+- `src/matcher.py`: keywords, classificação por eixo e deduplicação
+- `src/analyzer.py`: agregações por eixo para o dia e para a janela recente
 - `src/emailer.py`: HTML e envio SMTP
 - `src/main.py`: orquestração, idempotência, outputs e modo demo
-- `tests/test_matcher.py`: testes de matcher/dedupe
-- `.github/workflows/doego-email.yml`: execução diária no GitHub Actions
+- `tests/test_matcher.py`: testes do matcher
+- `.github/workflows/doego-email.yml`: execução diária com redundância
+- `.github/workflows/doego-watchdog.yml`: fallback caso o envio principal não rode
 
 ## Requisitos
 
@@ -28,19 +32,19 @@ A coleta usa a fonte oficial `https://diariooficial.abc.go.gov.br/` e endpoints 
 
 ## Execução local
 
-1. Instalar dependências:
+1. Instale as dependências:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Rodar processamento sem enviar e-mail:
+2. Gere os artefatos sem enviar e-mail:
 
 ```bash
 python -m src.main --no-send
 ```
 
-3. Rodar com envio SMTP (defina variáveis de ambiente):
+3. Para envio SMTP, use variáveis de ambiente ou copie `config/monitor_diario_goias.env.example` para `config/monitor_diario_goias.env` e carregue os valores:
 
 ```bash
 set EMAIL_FROM=seu@email.com
@@ -52,123 +56,69 @@ set SMTP_PASS=senha
 python -m src.main
 ```
 
-Para forçar reenvio no mesmo dia (ignorando idempotência):
+Para forçar reenvio no mesmo dia:
 
 ```bash
 python -m src.main --force-send
 ```
 
-4. Gerar e-mail de exemplo com dados simulados (sem chamar DOE):
+Modo demo:
 
 ```bash
 python -m src.main --demo
 ```
 
-5. Rodar self-test ponta-a-ponta com 1 ocorrência fake (sem chamar DOE):
-
-```bash
-python -m src.main --self-test
-```
-
-Para validar sem enviar e-mail:
+Self-test:
 
 ```bash
 python -m src.main --self-test --no-send
 ```
+
+## Saídas
 
 Arquivos gerados em `outputs/`:
 
 - `report.json`
 - `matches_today.csv`
 - `email.html`
-- `sample_email.html` (modo demo)
-- `self_test_email.html` (modo self-test)
+- `sample_email.html`
+- `self_test_email.html`
 
-## Configuração de secrets no GitHub
+O `report.json` agora inclui:
 
-No repositório, configure em `Settings > Secrets and variables > Actions`:
+- `report.sections.microrregioes_saneamento_basico`
+- `report.sections.recursos_hidricos_geral`
+- `recent_items_5d`
+
+## GitHub Actions
+
+Secrets esperados em `Settings > Secrets and variables > Actions`:
 
 - `EMAIL_FROM`
-- `EMAIL_TO` (um ou vários separados por vírgula)
+- `EMAIL_TO`
 - `SMTP_HOST`
-- `SMTP_PORT` (ex.: `587`)
+- `SMTP_PORT`
 - `SMTP_USER`
 - `SMTP_PASS`
 
-## Workflow diário
+O workflow principal:
 
-Arquivo: `.github/workflows/doego-email.yml`
+- roda diariamente em `08:30` e `08:55` de `America/Sao_Paulo`
+- mantém idempotência com `.state/sent_log.json`
+- faz retry automático do monitor
+- publica artefatos com HTML, JSON e log de envio
 
-- Runner: `ubuntu-latest`
-- Cron: `30 11 * * *` (UTC, equivalente a 08:30 em America/Sao_Paulo)
-- Etapas:
-  - checkout
-  - setup Python
-  - restore cache de `.state/sent_log.json`
-  - install deps
-  - executar `python -m src.main`
-  - gerar demo `python -m src.main --demo`
-  - upload artifacts (`outputs/`, `.state/sent_log.json`)
-  - save cache do sent log
+O watchdog:
 
-No `Run workflow` manual, você pode marcar `force_send=true` para reenviar no mesmo dia.
+- verifica se houve execução bem-sucedida no dia
+- dispara `workflow_dispatch` do principal se necessário
 
-## Idempotência
+## Janela e classificação
 
-O envio é controlado por `.state/sent_log.json` (chave por data local `America/Sao_Paulo`).
-
-Se o workflow rodar duas vezes no mesmo dia e `sent=true`, o script encerra sem reenviar e-mail.
-
-No GitHub Actions, o arquivo é persistido entre execuções via cache (`actions/cache`).
-
-## Palavras-chave e temas
-
-As keywords estão em `src/matcher.py` no dicionário `KEYWORD_ALIASES`.
-
-Para adicionar/remover termos:
-
-1. edite `KEYWORD_ALIASES`
-2. ajuste `THEME_RULES` se quiser mudar o agrupamento de temas
-
-Busca é case-insensitive e normalizada para acentos.
-
-## Ranking de relevância
-
-Implementado conforme regra:
-
-- `+3`: licitação/pregão/concorrência/dispensa/inexigibilidade
-- `+2`: SANEAGO
-- `+2`: outorga/captação/recursos hídricos
-- `+1`: valores/quantias ou prazos (regex)
-- `+1`: contrato/aditivo
-
-Ordenação: score desc, depois data/edição.
-
-## Extração leve (sem PDF por padrão)
-
-Por padrão, o robô usa apenas fontes HTML (`visualizacoes/html` e `visualizacoes/jornal`), que são mais leves e rápidas.
-
-Para habilitar fallback em PDF quando necessário, defina:
-
-```bash
-set ENABLE_PDF_FALLBACK=true
-```
-
-E instale dependências opcionais de PDF:
-
-```bash
-pip install pdfplumber pypdf
-```
-
-No GitHub Actions, a variável já está configurada como `false` para manter execução mais leve.
-
-## Observabilidade e resiliência
-
-- Logs no console do workflow
-- Artifacts com JSON/CSV/HTML
-- Retries e timeouts para rede
-- Fallback opcional de extração HTML/Jornal -> PDF
-- Registro de alertas técnicos no rodapé do e-mail
+- A janela consolidada é de `5` dias, incluindo o dia corrente.
+- O eixo `microrregiões de saneamento básico` prioriza convocações/assembleias do colegiado microrregional.
+- O eixo `recursos hídricos geral` captura ocorrências amplas ligadas a saneamento, água, esgoto, SANEAGO, outorga e governança hídrica.
+- Alertas municipais correlatos continuam destacados em seção própria no e-mail.
 
 ## Testes
 

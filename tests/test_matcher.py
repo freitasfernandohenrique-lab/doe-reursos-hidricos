@@ -28,6 +28,7 @@ def test_find_matches_detects_keywords_with_accents():
     assert "recursos hidricos" in groups
     assert "agua" in groups
     assert "esgoto" in groups
+    assert any(m.monitor_axis == "microrregioes_saneamento_basico" for m in matches)
 
 
 def test_dedupe_keeps_highest_score_per_context():
@@ -58,3 +59,13 @@ def test_secondary_municipal_alert_captures_smae_without_axis_terms():
     alerts = find_secondary_municipal_alerts(_edition(), text, source_type="html")
     assert alerts
     assert "superintendencia municipal de agua e esgoto" in alerts[0].keyword
+
+
+def test_generic_hydric_axis_captures_non_microrregional_context():
+    text = (
+        "A SEMAD publica pedido de outorga para captacao de agua superficial "
+        "e medidas de seguranca hidrica no municipio."
+    )
+    matches = find_matches(_edition(), text, source_type="html")
+    assert matches
+    assert all(m.monitor_axis == "recursos_hidricos_geral" for m in matches)

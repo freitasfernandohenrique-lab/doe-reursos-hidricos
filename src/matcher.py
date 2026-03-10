@@ -80,6 +80,7 @@ class MatchItem:
     orgao: str
     link: str
     source_type: str
+    monitor_axis: str = ""
     axis_analysis: str = ""
     correlated_not_prioritized: str = ""
 
@@ -202,6 +203,25 @@ def _build_axis_analysis(groups: set[str]) -> str:
     return "Trecho aderente ao eixo por tratar de convocacao de assembleia com foco em " + ", ".join(signs) + "."
 
 
+def _build_generic_hydric_analysis(groups: set[str], context: str) -> str:
+    signs: list[str] = []
+    if "recursos hidricos" in groups or "governanca hidrica" in groups:
+        signs.append("gestao/outorga/seguranca hidrica")
+    if "saneamento" in groups:
+        signs.append("saneamento basico")
+    if "agua" in groups:
+        signs.append("agua")
+    if "esgoto" in groups:
+        signs.append("esgoto")
+    if "saneago" in groups:
+        signs.append("SANEAGO")
+    if not signs:
+        signs.append("tema hidrico correlato")
+    if any(pattern.search(context) for pattern in EXCLUDED_LOW_COMPLEXITY_PATTERNS):
+        return "Trecho relacionado a recursos hidricos, mas com baixa prioridade por tratar de contratacao operacional simples."
+    return "Trecho classificado no eixo amplo por envolver " + ", ".join(signs) + "."
+
+
 def _build_correlated_not_prioritized(context: str) -> str:
     if EXCLUDED_LOW_COMPLEXITY_PATTERNS[0].search(context):
         return "Tema correlato identificado (licitacao/contratacao), mas nao priorizado por fugir do eixo estrategico."
@@ -236,6 +256,9 @@ SECONDARY_MUNICIPAL_PATTERNS = [
         ),
     ),
 ]
+
+
+GENERIC_HYDRIC_REQUIRED_GROUPS = {"recursos hidricos", "governanca hidrica", "saneamento", "agua", "esgoto", "saneago"}
 
 
 def find_secondary_municipal_alerts(
@@ -325,8 +348,14 @@ def find_matches(edition: dict[str, Any], text: str, source_type: str) -> list[M
         orgao = infer_orgao(context)
         score = compute_score(groups, context)
         link = edition.get("pdf_url") or edition.get("html_url") or ""
-        if not _is_axis_target(groups, context):
+        has_excluded = any(pattern.search(context) for pattern in EXCLUDED_LOW_COMPLEXITY_PATTERNS)
+        is_primary_axis = _is_axis_target(groups, context)
+        is_generic_axis = bool(groups & GENERIC_HYDRIC_REQUIRED_GROUPS)
+        if not is_primary_axis and not is_generic_axis:
             continue
+        if has_excluded and not is_primary_axis:
+            continue
+        monitor_axis = "microrregioes_saneamento_basico" if is_primary_axis else "recursos_hidricos_geral"
         unique_id = _uid(link, context, theme)
         if unique_id in seen:
             continue
@@ -346,8 +375,17 @@ def find_matches(edition: dict[str, Any], text: str, source_type: str) -> list[M
                 orgao=orgao,
                 link=link,
                 source_type=source_type,
-                axis_analysis=_build_axis_analysis(groups),
-                correlated_not_prioritized=_build_correlated_not_prioritized(context),
+                monitor_axis=monitor_axis,
+                axis_analysis=(
+                    _build_axis_analysis(groups)
+                    if is_primary_axis
+                    else _build_generic_hydric_analysis(groups, context)
+                ),
+                correlated_not_prioritized=(
+                    _build_correlated_not_prioritized(context)
+                    if is_primary_axis
+                    else ""
+                ),
             )
         )
 
