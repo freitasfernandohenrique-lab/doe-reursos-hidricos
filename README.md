@@ -113,6 +113,18 @@ O watchdog:
 - verifica se houve execução bem-sucedida no dia
 - dispara `workflow_dispatch` do principal se necessário
 
+## Deploy no Render
+
+Há uma configuração pronta para Render em `render.yaml` e um guia passo a passo em `docs/deploy-render.md`.
+
+No Render, este projeto deve ser criado como `Cron Job`.
+
+Observação importante:
+
+- no Render o armazenamento local é efêmero
+- por isso a idempotência via `.state/sent_log.json` fica desabilitada por padrão nesse ambiente
+- se você quiser idempotência persistente no Render, o ideal é mover esse estado para um datastore externo
+
 ## Janela e classificação
 
 - A janela consolidada é de `5` dias, incluindo o dia corrente.

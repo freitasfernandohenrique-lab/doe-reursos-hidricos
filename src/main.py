@@ -84,6 +84,17 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _running_on_render() -> bool:
+    return _env_bool("RENDER", default=False)
+
+
+def _sent_log_enabled() -> bool:
+    # Render cron jobs have ephemeral local storage, so file-based idempotency
+    # should be explicitly enabled there instead of assumed.
+    default = not _running_on_render()
+    return _env_bool("ENABLE_SENT_LOG", default=default)
+
+
 def _build_recent_window_items(
     matches: list[MatchItem],
     secondary_alerts: list[SecondaryAlertItem],
@@ -306,6 +317,7 @@ def run(
 
     out_dir = Path(os.getenv("OUTPUT_DIR", "outputs"))
     state_file = Path(os.getenv("SENT_LOG_PATH", ".state/sent_log.json"))
+    sent_log_enabled = _sent_log_enabled()
 
     if demo:
         report, run_meta, html_body = _demo_report(today_iso)
@@ -328,12 +340,18 @@ def run(
             print("Self-test finalizado.")
         return code
 
-    sent_log = _load_sent_log(state_file)
-    if not force_send and sent_log.get(today_iso, {}).get("sent"):
-        print(f"E-mail já enviado em {today_iso}. Encerrando de forma idempotente.")
-        return 0
-    if force_send:
-        print("FORCE_SEND ativo: ignorando bloqueio de idempotência.")
+    sent_log: dict[str, Any] = {}
+    if sent_log_enabled:
+        sent_log = _load_sent_log(state_file)
+        if not force_send and sent_log.get(today_iso, {}).get("sent"):
+            print(f"E-mail já enviado em {today_iso}. Encerrando de forma idempotente.")
+            return 0
+        if force_send:
+            print("FORCE_SEND ativo: ignorando bloqueio de idempotência.")
+    elif force_send:
+        print("FORCE_SEND ativo, mas ENABLE_SENT_LOG está desabilitado; prosseguindo normalmente.")
+    elif _running_on_render():
+        print("ENABLE_SENT_LOG desabilitado: ambiente Render detectado com armazenamento local efêmero.")
 
     start_date = today.date() - timedelta(days=4)
     end_date = today.date()
@@ -427,7 +445,7 @@ def run(
     if code != 0:
         return code
 
-    if send_email:
+    if send_email and sent_log_enabled:
         sent_log[today_iso] = {
             "sent": True,
             "sent_at": _today_sp().isoformat(),
