@@ -1,15 +1,16 @@
-﻿name: DOE-GO Email Monitor
+name: DOE-GO Email Monitor
 
 on:
   schedule:
-    - cron: "30 11 * * *" # 08:30 America/Sao_Paulo (aprox.)
+    - cron: "30 11 * * *" # 08:30 America/Sao_Paulo (principal)
+    - cron: "55 11 * * *" # 08:55 America/Sao_Paulo (backup)
   workflow_dispatch:
     inputs:
       force_send:
-        description: "Forçar reenvio manual (ignora idempotência do dia)"
+        description: "Ignorar idempotencia e enviar mesmo se ja houve envio hoje"
         required: false
-        default: false
         type: boolean
+        default: false
 
 concurrency:
   group: doego-email-monitor
@@ -54,8 +55,8 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SENT_LOG_PATH: .state/sent_log.json
           OUTPUT_DIR: outputs
-          ENABLE_PDF_FALLBACK: "false"
-          FORCE_SEND: ${{ github.event.inputs.force_send || 'false' }}
+          ENABLE_PDF_FALLBACK: "true"
+          FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' && inputs.force_send || 'false' }}
         run: |
           for i in 1 2 3; do
             python -m src.main && break
