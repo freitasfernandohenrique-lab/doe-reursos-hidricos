@@ -1,0 +1,69 @@
+name: DOE-GO Watchdog
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # 10:00 America/Sao_Paulo
+    - cron: "0 16 * * *" # 13:00 America/Sao_Paulo
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check for successful scheduled run today
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const workflow_id = 'doego-email.yml';
+            const formatDate = (value) => new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'America/Sao_Paulo',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).format(value);
+
+            const localDate = formatDate(new Date());
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner,
+              repo,
+              workflow_id,
+              branch: 'main',
+              event: 'schedule',
+              per_page: 100,
+            });
+
+            const successfulToday = runs.filter((run) => {
+              return formatDate(new Date(run.created_at)) === localDate
+                && run.status === 'completed'
+                && run.conclusion === 'success';
+            });
+
+            core.info(`Data local considerada: ${localDate}`);
+            core.info(`Execucoes agendadas com sucesso hoje: ${successfulToday.length}`);
+            for (const run of successfulToday.slice(0, 5)) {
+              core.info(`Run ${run.id} em ${run.created_at}`);
+            }
+
+            core.setOutput('already_ok', successfulToday.length > 0 ? 'true' : 'false');
+
+      - name: Trigger email workflow fallback
+        if: steps.check.outputs.already_ok != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run doego-email.yml --ref main
+
+      - name: Report watchdog result
+        run: |
+          if [ "${{ steps.check.outputs.already_ok }}" = "true" ]; then
+            echo "Workflow diario ja executou com sucesso hoje."
+          else
+            echo "Nenhuma execucao agendada bem-sucedida hoje. Fallback disparado."
+          fi

@@ -1,0 +1,26 @@
+services:
+  - type: cron
+    name: doego-monitor-saneamento
+    runtime: python
+    schedule: "30 11 * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python -m src.main"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: ENABLE_PDF_FALLBACK
+        value: "false"
+      - key: ENABLE_SENT_LOG
+        value: "false"
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_TO
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false

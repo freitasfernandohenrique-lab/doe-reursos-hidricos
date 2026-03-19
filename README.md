@@ -113,6 +113,22 @@ Arquivo: `.github/workflows/doego-email.yml`
 
 No `Run workflow` manual, você pode marcar `force_send=true` para reenviar no mesmo dia.
 
+## Watchdog no GitHub
+
+Arquivo: `.github/workflows/doego-watchdog.yml`
+
+- Executa verificações de fallback às `10:00` e `13:00` em `America/Sao_Paulo`
+- Confere se já houve uma execução agendada bem-sucedida do workflow principal no dia
+- Se não houve, dispara automaticamente `doego-email.yml`
+
+Isso ajuda quando o `schedule` do GitHub atrasa além do esperado.
+
+## Deploy no Render
+
+Há uma configuração pronta para Render em `render.yaml` e um guia passo a passo em `docs/deploy-render.md`.
+
+No Render, este projeto deve ser criado como `Cron Job`.
+
 ## Idempotência
 
 O envio é controlado por `.state/sent_log.json` (chave por data local `America/Sao_Paulo`).
