@@ -41,7 +41,7 @@ Esse cron está em UTC. Na prática, `30 11 * * *` corresponde a `08:30` em `Ame
 Estas variáveis já ficam previstas no blueprint:
 
 - `PYTHON_VERSION=3.11.11`
-- `ENABLE_PDF_FALLBACK=false`
+- `ENABLE_PDF_FALLBACK=true`
 - `ENABLE_SENT_LOG=false`
 - `SMTP_PORT=587`
 
