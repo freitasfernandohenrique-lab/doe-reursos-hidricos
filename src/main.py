@@ -31,6 +31,37 @@ def _tz_sp() -> timezone | ZoneInfo:
 TZ = _tz_sp()
 
 
+def _app_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _bootstrap_env() -> Path:
+    root = _app_root()
+    candidates = [
+        root / "config" / "monitor_diario_goias.env",
+        root / "monitor_diario_goias.env",
+    ]
+    for candidate in candidates:
+        _load_env_file(candidate)
+    return root
+
+
 def _load_sent_log(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -142,6 +173,25 @@ def _build_recent_window_items(
         reverse=True,
     )
     return items
+
+
+def _merge_match_items(existing: list[MatchItem], extra: list[MatchItem]) -> list[MatchItem]:
+    merged = {item.unique_id: item for item in existing}
+    for item in extra:
+        current = merged.get(item.unique_id)
+        if current is None or item.score > current.score:
+            merged[item.unique_id] = item
+    return list(merged.values())
+
+
+def _merge_secondary_alerts(
+    existing: list[SecondaryAlertItem],
+    extra: list[SecondaryAlertItem],
+) -> list[SecondaryAlertItem]:
+    merged = {item.unique_id: item for item in existing}
+    for item in extra:
+        merged.setdefault(item.unique_id, item)
+    return list(merged.values())
 
 
 def _demo_report(today_iso: str) -> tuple[dict[str, Any], dict[str, Any], str]:
@@ -314,9 +364,10 @@ def run(
     started = time.time()
     today = _today_sp()
     today_iso = today.date().isoformat()
+    app_root = _app_root()
 
-    out_dir = Path(os.getenv("OUTPUT_DIR", "outputs"))
-    state_file = Path(os.getenv("SENT_LOG_PATH", ".state/sent_log.json"))
+    out_dir = Path(os.getenv("OUTPUT_DIR", str(app_root / "outputs")))
+    state_file = Path(os.getenv("SENT_LOG_PATH", str(app_root / ".state" / "sent_log.json")))
     sent_log_enabled = _sent_log_enabled()
 
     if demo:
@@ -366,46 +417,47 @@ def run(
     matches: list[MatchItem] = []
     secondary_alerts: list[SecondaryAlertItem] = []
     pages_analyzed = 0
-    allow_pdf_fallback = _env_bool("ENABLE_PDF_FALLBACK", default=False)
+    allow_pdf_fallback = _env_bool("ENABLE_PDF_FALLBACK", default=True)
     for edition in editions:
+        edition_dict = edition.to_dict()
         extracted = extract_text_for_edition(
-            edition.to_dict(),
+            edition_dict,
             prefer_html=True,
             allow_pdf_fallback=allow_pdf_fallback,
         )
         pages_analyzed += int(extracted.pages or 0)
         warnings.extend(extracted.warnings)
-        found = find_matches(edition.to_dict(), extracted.text, source_type=extracted.source_type)
-        matches.extend(found)
-        secondary_found = find_secondary_municipal_alerts(
-            edition.to_dict(),
+        edition_matches = find_matches(edition_dict, extracted.text, source_type=extracted.source_type)
+        edition_secondary_alerts = find_secondary_municipal_alerts(
+            edition_dict,
             extracted.text,
             source_type=extracted.source_type,
         )
-        secondary_alerts.extend(secondary_found)
 
-        # Se HTML/Jornal nao trouxe achados, tenta PDF para cobrir textos nao renderizados no HTML.
+        # Usa o PDF para complementar a extração HTML/Jornal, cobrindo textos não renderizados
+        # ou trechos relevantes omitidos na visualização web do DOE.
         if (
             allow_pdf_fallback
             and extracted.source_type in {"view_html_diario", "html", "jornal"}
-            and not found
-            and not secondary_found
         ):
             extracted_pdf = extract_text_for_edition(
-                edition.to_dict(),
+                edition_dict,
                 prefer_html=False,
                 allow_pdf_fallback=True,
             )
             pages_analyzed += int(extracted_pdf.pages or 0)
             warnings.extend(extracted_pdf.warnings)
-            found_pdf = find_matches(edition.to_dict(), extracted_pdf.text, source_type=extracted_pdf.source_type)
-            matches.extend(found_pdf)
+            found_pdf = find_matches(edition_dict, extracted_pdf.text, source_type=extracted_pdf.source_type)
+            edition_matches = _merge_match_items(edition_matches, found_pdf)
             secondary_pdf = find_secondary_municipal_alerts(
-                edition.to_dict(),
+                edition_dict,
                 extracted_pdf.text,
                 source_type=extracted_pdf.source_type,
             )
-            secondary_alerts.extend(secondary_pdf)
+            edition_secondary_alerts = _merge_secondary_alerts(edition_secondary_alerts, secondary_pdf)
+
+        matches.extend(edition_matches)
+        secondary_alerts.extend(edition_secondary_alerts)
 
     report = analyze(matches, today_iso=today_iso, window_days=5)
     recent_items_5d = _build_recent_window_items(matches, secondary_alerts)
@@ -473,6 +525,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    _bootstrap_env()
     args = _parse_args()
     env_force_send = _env_bool("FORCE_SEND", default=False)
     code = run(
